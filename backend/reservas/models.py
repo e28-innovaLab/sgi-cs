@@ -1,22 +1,49 @@
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 
 
 class EstadoReserva(models.Model):
+
+    class Estados(models.TextChoices):
+        PENDIENTE = "Pendiente", "Pendiente"
+        CONFIRMADA = "Confirmada", "Confirmada"
+        CANCELADA = "Cancelada", "Cancelada"
+        RECHAZADA = "Rechazada", "Rechazada"
+
     id_estado_reserva = models.AutoField(
         primary_key=True,
         db_column="idEstadoReserva",
     )
 
-    estado = models.CharField(max_length=50)
+    estado = models.CharField(
+        max_length=50,
+        choices=Estados.choices,
+        unique=True,
+    )
 
     class Meta:
         db_table = "estadoReserva"
         verbose_name = "Estado de reserva"
         verbose_name_plural = "Estados de reserva"
+        ordering = ["id_estado_reserva"]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(
+                    estado__in=[
+                        "Pendiente",
+                        "Confirmada",
+                        "Cancelada",
+                        "Rechazada",
+                    ]
+                ),
+                name="estado_reserva_valido",
+            )
+        ]
 
     def __str__(self):
         return self.estado
+
 
 
 class Reserva(models.Model):
@@ -41,7 +68,7 @@ class Reserva(models.Model):
         db_column="tipoActividad",
     )
 
-    fecha_reserva = models.DateTimeField(
+    fecha_reserva = models.DateField(
         db_column="fechaReserva",
     )
 

@@ -1,5 +1,4 @@
-
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, UserManager
 from django.db import models
 
 
@@ -24,7 +23,21 @@ class Rol(models.Model):
         verbose_name_plural = "Roles"
 
 
+class UsuarioManager(UserManager):
+    def create_superuser(self, username, email=None, password=None, **extra_fields):
+        rol_admin, _ = Rol.objects.get_or_create(nombre="ADMIN")
+        extra_fields.setdefault("rol", rol_admin)
+
+        return super().create_superuser(
+            username=username,
+            email=email,
+            password=password,
+            **extra_fields,
+        )
+
+
 class Usuario(AbstractUser):
+    objects = UsuarioManager()
     id_usuario = models.AutoField(
         primary_key=True,
         db_column="idUsuario",
