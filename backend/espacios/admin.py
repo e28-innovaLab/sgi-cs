@@ -4,7 +4,8 @@ from .models import Aula, Categoria, Equipamiento
 
 @admin.register(Aula)
 class AulaAdmin(admin.ModelAdmin):
-    list_display = ("id_aula", "nombre", "capacidad", "sillas", "mesas", "color")
+    list_display = ("id_aula", "nombre", "tipo", "estado", "capacidad", "sillas", "mesas", "color")
+    list_filter = ('tipo', 'estado')
     search_fields = ("nombre",)
     ordering = ("nombre",)
 

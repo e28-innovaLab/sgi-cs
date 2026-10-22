@@ -1,7 +1,19 @@
 from django.db import models
+from django.core.validators import MinValueValidator
 
 
 class Aula(models.Model):
+    class Tipo(models.TextChoices):
+        AULA = 'AULA', 'Aula'
+        LABORATORIO = 'LABORATORIO', 'Laboratorio'
+        TALLER = 'TALLER', 'Taller'
+        OTRO = 'OTRO', 'Otro'
+
+    class Estado(models.TextChoices):
+        DISPONIBLE = 'DISPONIBLE', 'Disponible'
+        MANTENIMIENTO = 'MANTENIMIENTO', 'En mantenimiento'
+        FUERA_SERVICIO = 'FUERA_SERVICIO', 'Fuera de servicio'
+
     id_aula = models.AutoField(
         primary_key=True,
         db_column="idAula",
@@ -12,7 +24,12 @@ class Aula(models.Model):
         unique=True,
     )
 
-    capacidad = models.PositiveIntegerField()
+    capacidad = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+
+    tipo = models.CharField(max_length=20, choices=Tipo.choices, default=Tipo.AULA)
+    ubicacion = models.CharField(max_length=200, blank=True, default='')
+    caracteristicas = models.TextField(blank=True, default='')
+    estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.DISPONIBLE)
 
     sillas = models.PositiveIntegerField(default=0)
 
@@ -87,7 +104,7 @@ class Equipamiento(models.Model):
         db_column="idAula",
     )
 
-    cantidad = models.PositiveIntegerField(default=1)
+    cantidad = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
 
     estado = models.CharField(
         max_length=20,

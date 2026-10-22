@@ -12,6 +12,14 @@ class RolAdmin(admin.ModelAdmin):
 
 @admin.register(Usuario)
 class UsuarioAdmin(UserAdmin):
+    fieldsets = UserAdmin.fieldsets + (
+        ('Centro de simulación', {'fields': ('rol', 'tipo_documento', 'numero_documento')}),
+    )
+    add_fieldsets = UserAdmin.add_fieldsets + (
+        ('Datos personales', {
+            'fields': ('first_name', 'last_name', 'email', 'rol', 'tipo_documento', 'numero_documento'),
+        }),
+    )
     list_display = (
         "username",
         "first_name",

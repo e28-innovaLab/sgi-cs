@@ -3,6 +3,9 @@ from django.db import models
 
 
 class Rol(models.Model):
+    ADMIN = 'ADMIN'
+    COORDINACION = 'COORDINACION'
+
     id_rol = models.AutoField(
         primary_key=True,
         db_column="idRol",
@@ -25,7 +28,7 @@ class Rol(models.Model):
 
 class UsuarioManager(UserManager):
     def create_superuser(self, username, email=None, password=None, **extra_fields):
-        rol_admin, _ = Rol.objects.get_or_create(nombre="ADMIN")
+        rol_admin, _ = Rol.objects.get_or_create(nombre=Rol.ADMIN)
         extra_fields.setdefault("rol", rol_admin)
 
         return super().create_superuser(
@@ -37,6 +40,10 @@ class UsuarioManager(UserManager):
 
 
 class Usuario(AbstractUser):
+    REQUIRED_FIELDS = [
+        'email', 'first_name', 'last_name', 'tipo_documento', 'numero_documento',
+    ]
+
     objects = UsuarioManager()
     id_usuario = models.AutoField(
         primary_key=True,

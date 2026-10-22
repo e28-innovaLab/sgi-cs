@@ -31,7 +31,7 @@ def obtener_aulas_disponibles(fecha, hora_inicio, hora_fin):
         flat=True,
     )
 
-    return Aula.objects.exclude(
+    return Aula.objects.filter(estado=Aula.Estado.DISPONIBLE).exclude(
         pk__in=aulas_ocupadas
     ).order_by("nombre")
 
