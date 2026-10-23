@@ -36,6 +36,7 @@ class LoginSerializer(serializers.Serializer):
 
 class UsuarioSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, trim_whitespace=False)
+    is_active = serializers.BooleanField(required=False, default=True)
     rol = serializers.PrimaryKeyRelatedField(
         queryset=Rol.objects.filter(nombre__in=[Rol.ADMIN, Rol.COORDINACION]),
     )
