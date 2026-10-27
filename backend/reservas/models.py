@@ -2,6 +2,7 @@ from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
+from .opciones import NACIONALIDADES
 
 
 class EstadoReserva(models.Model):
@@ -149,6 +150,13 @@ class Reserva(models.Model):
         settings.AUTH_USER_MODEL,
         through="UsuarioPorReserva",
         related_name="reservas",
+    )
+
+    participantes = models.ManyToManyField(
+    "Participante",
+    through="ReservaParticipante",
+    related_name="reservas",
+    blank=True,
     )
 
     fecha_reserva = models.DateField(
@@ -322,16 +330,29 @@ class SolicitudEquipo(models.Model):
 
 class Participante(models.Model):
 
+    TIPO_DOCUMENTO_CHOICES = [
+        ("DNI", "DNI"),
+        ("LE", "Libreta de Enrolamiento (LE)"),
+        ("LC", "Libreta Cívica (LC)"),
+        ("CI", "Cédula de Identidad (CI)"),
+        ("PASAPORTE", "Pasaporte"),
+        ("OTRO", "Otro"),
+    ]
+
+    GENERO_CHOICES = [
+        ("FEMENINO", "Femenino"),
+        ("MASCULINO", "Masculino"),
+        ("OTRO", "Otro"),
+    ]
+
+    LUGAR_RESIDENCIA_CHOICES = [
+        ("CABA", "Ciudad Autónoma de Buenos Aires"),
+        ("PROVINCIA_BA", "Provincia de Buenos Aires"),
+    ]
+
     id_participante = models.AutoField(
         primary_key=True,
         db_column="idParticipante",
-    )
-
-    reserva = models.ForeignKey(
-        Reserva,
-        on_delete=models.CASCADE,
-        related_name="participantes",
-        db_column="idReserva",
     )
 
     nombres = models.CharField(max_length=100)
@@ -340,9 +361,11 @@ class Participante(models.Model):
 
     tipo_documento = models.CharField(
         max_length=20,
+        choices=TIPO_DOCUMENTO_CHOICES,
         db_column="tipoDoc",
     )
 
+    # Texto para admitir documentos nacionales y extranjeros.
     numero_documento = models.CharField(
         max_length=30,
         db_column="numeroDoc",
@@ -353,12 +376,16 @@ class Participante(models.Model):
     )
 
     genero = models.CharField(
-        max_length=50,
+        max_length=20,
+        choices=GENERO_CHOICES,
         null=True,
         blank=True,
     )
 
-    nacionalidad = models.CharField(max_length=100)
+    nacionalidad = models.CharField(
+        max_length=100,
+        choices=NACIONALIDADES,                                                               
+    )
 
     domicilio = models.CharField(
         max_length=200,
@@ -367,7 +394,8 @@ class Participante(models.Model):
     )
 
     lugar_residencia = models.CharField(
-        max_length=150,
+        max_length=20,
+        choices=LUGAR_RESIDENCIA_CHOICES,
         db_column="lugarResidencia",
     )
 
@@ -381,14 +409,61 @@ class Participante(models.Model):
         blank=True,
     )
 
-    presente = models.BooleanField(
-        null=True,
-        blank=True,
-    )
-
     class Meta:
         db_table = "participante"
 
     def __str__(self):
         return f"{self.nombres} {self.apellidos}"
 
+
+class ReservaParticipante(models.Model):
+    id_reserva_participante = models.AutoField(
+        primary_key=True,
+        db_column="idReservaParticipante",
+    )
+
+    reserva = models.ForeignKey(
+        Reserva,
+        on_delete=models.CASCADE,
+        related_name="reservas_participantes",
+        db_column="idReserva",
+    )
+
+    participante = models.ForeignKey(
+        Participante,
+        on_delete=models.CASCADE,
+        related_name="reservas_participantes",
+        db_column="idParticipante",
+    )
+
+    presente = models.BooleanField(
+        null=True,
+        blank=True,
+    )
+
+    ROL_CHOICES = [
+    ("DOCENTE", "Docente"),
+    ("AYUDANTE_DOCENTE", "Ayudante docente"),
+    ("ESTUDIANTE", "Estudiante"),
+    ("OBSERVADOR", "Observador"),
+    ("VISITA", "Visita"),
+    ("OTRO", "Otro"),
+    ]
+
+    rol = models.CharField(
+    max_length=20,
+    choices=ROL_CHOICES,
+    default="OTRO",
+    )
+
+    class Meta:
+        db_table = "reservaParticipante"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["reserva", "participante"],
+                name="reserva_participante_unico",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.reserva} - {self.participante}"

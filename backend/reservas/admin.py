@@ -7,6 +7,7 @@ from .models import (
     SolicitudEquipo,
     UsuarioPorReserva,
     Participante,
+    ReservaParticipante
 )
 
 
@@ -77,15 +78,51 @@ class UsuarioPorReservaAdmin(admin.ModelAdmin):
     search_fields = ("usuario__username", "reserva__actividad__nombre")
 
 
+
 @admin.register(Participante)
 class ParticipanteAdmin(admin.ModelAdmin):
     list_display = (
         "id_participante",
+        "apellidos",
+        "nombres",
+        "tipo_documento",
+        "numero_documento",
+        "nacionalidad",
+        "lugar_residencia",
+        "institucion",
+    )
+
+    list_filter = (
+        "tipo_documento",
+        "genero",
+        "nacionalidad",
+        "lugar_residencia",
+        "institucion",
+    )
+
+    search_fields = (
         "nombres",
         "apellidos",
         "numero_documento",
+        "mail",
         "institucion",
+    )
+
+    ordering = ("apellidos", "nombres")
+
+
+@admin.register(ReservaParticipante)
+class ReservaParticipanteAdmin(admin.ModelAdmin):
+    list_display = (
+        "id_reserva_participante",
+        "reserva",
+        "participante",
+        "rol",
         "presente",
     )
-    list_filter = ("genero", "institucion", "presente")
-    search_fields = ("nombres", "apellidos", "numero_documento")
+    list_filter = ("rol", "presente")
+    search_fields = (
+        "participante__nombres",
+        "participante__apellidos",
+        "reserva__actividad__nombre",
+    )
