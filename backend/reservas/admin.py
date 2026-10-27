@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import (
+    Actividad,
     Reserva,
     EstadoReserva,
     ReservaAula,
@@ -7,6 +8,24 @@ from .models import (
     UsuarioPorReserva,
     Participante,
 )
+
+
+
+@admin.register(Actividad)
+class ActividadAdmin(admin.ModelAdmin):
+    list_display = (
+        "id_actividad",
+        "nombre",
+        "tipo",
+        "responsable",
+        "fecha_estimada",
+        "horario_inicio_estimado",
+        "horario_fin_estimado",
+        "participantes_estimados",
+    )
+    list_filter = ("tipo", "fecha_estimada")
+    search_fields = ("nombre", "responsable__username")
+    ordering = ("fecha_estimada", "horario_inicio_estimado")
 
 
 @admin.register(EstadoReserva)
@@ -19,15 +38,14 @@ class EstadoReservaAdmin(admin.ModelAdmin):
 class ReservaAdmin(admin.ModelAdmin):
     list_display = (
         "id_reserva",
-        "nombre_actividad",
-        "tipo_actividad",
+        "actividad",
         "fecha_reserva",
         "horario_inicio",
         "horario_fin",
         "estado_reserva",
     )
-    list_filter = ("tipo_actividad", "estado_reserva", "fecha_reserva")
-    search_fields = ("nombre_actividad", "cod_reunion")
+    list_filter = ("estado_reserva", "fecha_reserva")
+    search_fields = ("actividad__nombre", "cod_reunion")
     ordering = ("-fecha_reserva",)
 
 
@@ -49,14 +67,14 @@ class SolicitudEquipoAdmin(admin.ModelAdmin):
         "estado_reserva",
     )
     list_filter = ("estado_reserva",)
-    search_fields = ("reserva__nombre_actividad", "equipamiento__nombre")
+    search_fields = ("reserva__actividad__nombre", "equipamiento__nombre")
 
 
 @admin.register(UsuarioPorReserva)
 class UsuarioPorReservaAdmin(admin.ModelAdmin):
     list_display = ("id_usuario_por_reserva", "reserva", "usuario", "solicitante")
     list_filter = ("solicitante",)
-    search_fields = ("usuario__username", "reserva__nombre_actividad")
+    search_fields = ("usuario__username", "reserva__actividad__nombre")
 
 
 @admin.register(Participante)

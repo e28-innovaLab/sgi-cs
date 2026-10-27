@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
 
@@ -45,27 +46,109 @@ class EstadoReserva(models.Model):
         return self.estado
 
 
+class Actividad(models.Model):
+
+    class Tipo(models.TextChoices):
+        CURSO = "CURSO", "Curso"
+        PRACTICA = "PRACTICA", "Práctica"
+        WORKSHOP = "WORKSHOP", "Workshop"
+        CAPACITACION = "CAPACITACION", "Capacitación"
+        OTRA = "OTRA", "Otra"
+
+    id_actividad = models.AutoField(
+        primary_key=True,
+        db_column="idActividad",
+    )
+
+    nombre = models.CharField(
+        max_length=200,
+        db_column="nombreActividad",
+    )
+
+    tipo = models.CharField(
+        max_length=20,
+        choices=Tipo.choices,
+        db_column="tipoActividad",
+    )
+
+    responsable = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="actividades_responsable",
+        db_column="idResponsable",
+    )
+
+    fecha_estimada = models.DateField(
+        db_column="fechaEstimada",
+    )
+
+    horario_inicio_estimado = models.TimeField(
+        db_column="horarioInicioEstimado",
+    )
+
+    horario_fin_estimado = models.TimeField(
+        db_column="horarioFinEstimado",
+    )
+
+    participantes_estimados = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)],
+        db_column="participantesEstimados",
+    )
+
+    requerimiento_espacio = models.TextField(
+        blank=True,
+        default="",
+        db_column="requerimientoEspacio",
+    )
+
+    equipamiento_necesario = models.TextField(
+        blank=True,
+        default="",
+        db_column="equipamientoNecesario",
+    )
+
+    class Meta:
+        db_table = "actividad"
+        verbose_name = "Actividad"
+        verbose_name_plural = "Actividades"
+        ordering = ["fecha_estimada", "horario_inicio_estimado"]
+
+    def clean(self):
+        super().clean()
+        if (
+            self.horario_inicio_estimado is not None
+            and self.horario_fin_estimado is not None
+            and self.horario_inicio_estimado >= self.horario_fin_estimado
+        ):
+            from django.core.exceptions import ValidationError
+
+            raise ValidationError({
+                "horario_fin_estimado":
+                    "La hora de fin debe ser posterior a la hora de inicio."
+            })
+
+    def __str__(self):
+        return self.nombre
+
 
 class Reserva(models.Model):
+
     id_reserva = models.AutoField(
         primary_key=True,
         db_column="idReserva",
+    )
+
+    actividad = models.ForeignKey(
+        Actividad,
+        on_delete=models.PROTECT,
+        related_name="reservas",
+        db_column="idActividad",
     )
 
     usuarios = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         through="UsuarioPorReserva",
         related_name="reservas",
-    )
-
-    nombre_actividad = models.CharField(
-        max_length=200,
-        db_column="nombreActividad",
-    )
-
-    tipo_actividad = models.CharField(
-        max_length=100,
-        db_column="tipoActividad",
     )
 
     fecha_reserva = models.DateField(
@@ -112,10 +195,11 @@ class Reserva(models.Model):
         db_table = "reserva"
 
     def __str__(self):
-        return self.nombre_actividad
+        return f"{self.actividad.nombre} - {self.fecha_reserva}"
 
 
 class UsuarioPorReserva(models.Model):
+
     id_usuario_por_reserva = models.AutoField(
         primary_key=True,
         db_column="idUsuarioPorReserva",
@@ -151,6 +235,7 @@ class UsuarioPorReserva(models.Model):
 
 
 class ReservaAula(models.Model):
+
     id_reserva_por_aula = models.AutoField(
         primary_key=True,
         db_column="idReservaPorAula",
@@ -188,6 +273,7 @@ class ReservaAula(models.Model):
 
 
 class SolicitudEquipo(models.Model):
+
     id_solicitud_por_equipo = models.AutoField(
         primary_key=True,
         db_column="idSolicitudPorEquipo",
@@ -235,6 +321,7 @@ class SolicitudEquipo(models.Model):
 
 
 class Participante(models.Model):
+
     id_participante = models.AutoField(
         primary_key=True,
         db_column="idParticipante",
@@ -304,3 +391,4 @@ class Participante(models.Model):
 
     def __str__(self):
         return f"{self.nombres} {self.apellidos}"
+

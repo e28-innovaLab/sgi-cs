@@ -4,7 +4,7 @@ from rest_framework.test import APITestCase
 
 from espacios.models import Aula, Categoria, Equipamiento
 from usuarios.models import Rol, Usuario
-from .models import EstadoReserva, Reserva, ReservaAula, SolicitudEquipo
+from .models import Actividad, EstadoReserva, Reserva, ReservaAula, SolicitudEquipo
 from .services import obtener_aulas_disponibles
 
 
@@ -24,11 +24,24 @@ class DisponibilidadAPITests(APITestCase):
         self.client.force_authenticate(self.usuario)
 
     def reservar(self, estado='Pendiente', inicio=time(10), fin=time(12), fecha=None):
+        actividad = Actividad.objects.create(
+            nombre="Práctica",
+            tipo=Actividad.Tipo.CURSO,
+            responsable=self.usuario,
+            fecha_estimada=fecha or self.fecha,
+            horario_inicio_estimado=inicio,
+            horario_fin_estimado=fin,
+            participantes_estimados=10,
+            )
+        
         reserva = Reserva.objects.create(
-            nombre_actividad='Práctica', tipo_actividad='Curso',
-            fecha_reserva=fecha or self.fecha, horario_inicio=inicio, horario_fin=fin,
+            actividad=actividad,
+            fecha_reserva=fecha or self.fecha, 
+            horario_inicio=inicio,
+            horario_fin=fin,
             estado_reserva=EstadoReserva.objects.get(estado=estado),
-        )
+            )
+        
         ReservaAula.objects.create(reserva=reserva, aula=self.aula)
         return reserva
 
