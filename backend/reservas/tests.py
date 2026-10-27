@@ -1,10 +1,17 @@
 from datetime import date, time
 
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
+from django.db.models.deletion import ProtectedError
+from django.test import TestCase
 from rest_framework.test import APITestCase
 
 from espacios.models import Aula, Categoria, Equipamiento
 from usuarios.models import Rol, Usuario
-from .models import Actividad, EstadoReserva, Reserva, ReservaAula, SolicitudEquipo
+from .models import (
+    Actividad, EstadoReserva, Participante, Reserva, ReservaAula,
+    ReservaParticipante, SolicitudEquipo,
+)
 from .services import obtener_aulas_disponibles
 
 
@@ -112,3 +119,80 @@ class DisponibilidadAPITests(APITestCase):
         )
         self.assertEqual(self.client.delete(f'/api/aulas/{self.aula.pk}/').status_code, 409)
         self.assertEqual(self.client.delete(f'/api/equipamientos/{equipo.pk}/').status_code, 409)
+
+
+class ActividadesYParticipantesTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.responsable = Usuario.objects.create_user(
+            username='responsable', rol=Rol.objects.get(nombre=Rol.COORDINACION),
+            numero_documento='800',
+        )
+        cls.actividad = Actividad.objects.create(
+            nombre='Práctica', tipo=Actividad.Tipo.PRACTICA,
+            responsable=cls.responsable, fecha_estimada=date(2027, 1, 15),
+            horario_inicio_estimado=time(10), horario_fin_estimado=time(12),
+            participantes_estimados=10,
+        )
+        cls.participante = Participante.objects.create(
+            nombres='Ana', apellidos='Gomez', tipo_documento='DNI',
+            numero_documento='801', fecha_nacimiento=date(2000, 1, 1),
+            nacionalidad='Argentina', lugar_residencia='CABA',
+            mail='ana@example.com', celular='1100000000',
+        )
+
+    def reservar(self):
+        return Reserva.objects.create(
+            actividad=self.actividad, fecha_reserva=self.actividad.fecha_estimada,
+            horario_inicio=time(10), horario_fin=time(12),
+        )
+
+    def test_actividad_rechaza_horario_final_igual_o_anterior(self):
+        for fin in [time(10), time(9)]:
+            with self.subTest(fin=fin):
+                self.actividad.horario_fin_estimado = fin
+                with self.assertRaises(ValidationError) as error:
+                    self.actividad.full_clean()
+                self.assertIn('horario_fin_estimado', error.exception.message_dict)
+
+    def test_actividad_requiere_al_menos_un_participante_estimado(self):
+        self.actividad.participantes_estimados = 0
+        with self.assertRaises(ValidationError) as error:
+            self.actividad.full_clean()
+        self.assertIn('participantes_estimados', error.exception.message_dict)
+
+    def test_responsable_con_actividades_no_se_elimina(self):
+        with self.assertRaises(ProtectedError):
+            self.responsable.delete()
+        self.assertTrue(Usuario.objects.filter(pk=self.responsable.pk).exists())
+
+    def test_una_persona_tiene_rol_y_asistencia_independientes_por_reserva(self):
+        primera = self.reservar()
+        segunda = self.reservar()
+        ReservaParticipante.objects.create(
+            reserva=primera, participante=self.participante, rol='DOCENTE', presente=True,
+        )
+        ReservaParticipante.objects.create(
+            reserva=segunda, participante=self.participante, rol='OBSERVADOR', presente=False,
+        )
+        self.assertCountEqual(self.participante.reservas.all(), [primera, segunda])
+        self.assertCountEqual(
+            self.participante.reservas_participantes.values_list('rol', 'presente'),
+            [('DOCENTE', True), ('OBSERVADOR', False)],
+        )
+
+    def test_no_se_duplica_una_persona_en_la_misma_reserva(self):
+        reserva = self.reservar()
+        ReservaParticipante.objects.create(reserva=reserva, participante=self.participante)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ReservaParticipante.objects.create(reserva=reserva, participante=self.participante)
+        self.assertEqual(reserva.participantes.count(), 1)
+
+    def test_eliminar_una_reserva_conserva_la_persona_y_sus_otras_reservas(self):
+        primera = self.reservar()
+        segunda = self.reservar()
+        for reserva in [primera, segunda]:
+            ReservaParticipante.objects.create(reserva=reserva, participante=self.participante)
+        primera.delete()
+        self.assertTrue(Participante.objects.filter(pk=self.participante.pk).exists())
+        self.assertEqual(list(self.participante.reservas.all()), [segunda])
