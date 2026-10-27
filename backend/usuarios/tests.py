@@ -145,6 +145,28 @@ class UsuariosAPITests(APITestCase):
         self.assertTrue(Usuario.objects.filter(pk=self.coordinacion.pk, is_active=False).exists())
         self.assertEqual(self.client.delete(f'/api/usuarios/{self.coordinacion.pk}/').status_code, 405)
 
+    def test_editar_usuario_inactivo_no_lo_reactiva_si_se_omite_is_active(self):
+        self.coordinacion.is_active = False
+        self.coordinacion.save(update_fields=['is_active'])
+        self.autenticar(self.admin)
+        datos = self.datos_usuario(
+            username=self.coordinacion.username,
+            numero_documento=self.coordinacion.numero_documento,
+        )
+        datos.pop('password')
+        for metodo in [self.client.patch, self.client.put]:
+            with self.subTest(metodo=metodo.__name__):
+                response = metodo(f'/api/usuarios/{self.coordinacion.pk}/', datos)
+                self.assertEqual(response.status_code, 200, response.data)
+                self.coordinacion.refresh_from_db()
+                self.assertFalse(self.coordinacion.is_active)
+
+    def test_admin_puede_crear_un_usuario_inactivo_explicitamente(self):
+        self.autenticar(self.admin)
+        response = self.client.post('/api/usuarios/', self.datos_usuario(is_active=False))
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertFalse(Usuario.objects.get(pk=response.data['id_usuario']).is_active)
+
     def test_admin_no_puede_desactivarse_ni_quitarse_su_rol(self):
         self.autenticar(self.admin)
         for cambios in [{'is_active': False}, {'rol': self.rol_coordinacion.pk}]:
