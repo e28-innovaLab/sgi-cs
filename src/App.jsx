@@ -11,6 +11,7 @@ const espacios = [
 
 function App() {
   const [logueado, setLogueado] = useState(false)
+  const [seccionActiva, setSeccionActiva] = useState('inicio')
 
   const [recursos, setRecursos] = useState(() => {
     const guardados = localStorage.getItem('siges-recursos')
@@ -54,7 +55,7 @@ function App() {
 
   const [espacioReserva, setEspacioReserva] = useState(
     espacios.find((espacio) => espacio.estado !== 'Mantenimiento')?.nombre ||
-      espacios[0].nombre
+    espacios[0].nombre
   )
 
   const [mensajeReserva, setMensajeReserva] = useState('')
@@ -214,23 +215,49 @@ function App() {
 
         <div className="menu-label">MENÚ PRINCIPAL</div>
 
+
         <nav className="menu">
-          <a className="menu-item active" href="#inicio">
+          <a
+            className={`menu-item ${seccionActiva === 'inicio' ? 'active' : ''}`}
+            href="#inicio"
+            onClick={() => setSeccionActiva('inicio')}
+          >
             ▦ <span>Inicio</span>
           </a>
-          <a className="menu-item" href="#reservas">
+
+          <a
+            className={`menu-item ${seccionActiva === 'reservas' ? 'active' : ''}`}
+            href="#reservas"
+            onClick={() => setSeccionActiva('reservas')}
+          >
             ▣ <span>Reservas</span>
           </a>
-          <a className="menu-item" href="#espacios">
+
+          <a
+            className={`menu-item ${seccionActiva === 'espacios' ? 'active' : ''}`}
+            href="#espacios"
+            onClick={() => setSeccionActiva('espacios')}
+          >
             ⌂ <span>Espacios</span>
           </a>
-          <a className="menu-item" href="#recursos">
+
+          <a
+            className={`menu-item ${seccionActiva === 'recursos' ? 'active' : ''}`}
+            href="#recursos"
+            onClick={() => setSeccionActiva('recursos')}
+          >
             ▤ <span>Recursos y equipos</span>
           </a>
-          <a className="menu-item" href="#listado-reservas">
+
+          <a
+            className={`menu-item ${seccionActiva === 'listado-reservas' ? 'active' : ''}`}
+            href="#listado-reservas"
+            onClick={() => setSeccionActiva('listado-reservas')}
+          >
             ▦ <span>Calendario</span>
           </a>
         </nav>
+
 
         <div className="sidebar-bottom">
           <div className="user-avatar">VH</div>

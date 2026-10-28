@@ -625,10 +625,14 @@ button {
   .brand {
     padding-bottom: 17px;
   }
-
-  .menu-label,
-  .sidebar-bottom {
+  .menu-label {
     display: none;
+  }
+
+  .sidebar-bottom {
+    display: flex;
+    margin-top: 15px;
+    padding: 12px 5px 0;
   }
 
   .menu {
