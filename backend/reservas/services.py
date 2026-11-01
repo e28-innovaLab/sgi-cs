@@ -1,6 +1,6 @@
 from espacios.models import Aula
-from .models import ReservaAula, EstadoReserva
-
+from .models import ReservaAula, EstadoReserva, UsuarioPorReserva
+from django.core.exceptions import ValidationError
 
 ESTADOS_QUE_BLOQUEAN = [
     EstadoReserva.Estados.PENDIENTE,
@@ -35,3 +35,19 @@ def obtener_aulas_disponibles(fecha, hora_inicio, hora_fin):
         pk__in=aulas_ocupadas
     ).order_by("nombre")
 
+
+def validar_solicitante_reserva(reserva):
+    """
+    Verifica que una reserva tenga exactamente un usuario solicitante.
+    """
+
+    cantidad_solicitantes = UsuarioPorReserva.objects.filter(
+        reserva=reserva,
+        solicitante=True,
+    ).count()
+
+    if cantidad_solicitantes != 1:
+        raise ValidationError(
+            "Para confirmar la reserva debe existir exactamente "
+            "un usuario solicitante."      
+        )

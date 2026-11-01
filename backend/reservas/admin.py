@@ -9,6 +9,10 @@ from .models import (
     Participante,
     ReservaParticipante
 )
+from django import forms
+from .services import validar_solicitante_reserva
+from django.core.exceptions import ValidationError
+
 
 
 
@@ -35,8 +39,34 @@ class EstadoReservaAdmin(admin.ModelAdmin):
     search_fields = ("estado",)
 
 
+class ReservaAdminForm(forms.ModelForm):
+
+    class Meta:
+        model = Reserva
+        fields = "__all__"
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        estado = cleaned_data.get("estado_reserva")
+
+        if (
+            estado
+            and estado.estado == EstadoReserva.Estados.CONFIRMADA
+            and self.instance.pk
+        ):
+            try:
+                validar_solicitante_reserva(self.instance)
+            except ValidationError as error:
+                self.add_error(None, error)
+
+        return cleaned_data
+
+
 @admin.register(Reserva)
 class ReservaAdmin(admin.ModelAdmin):
+    form = ReservaAdminForm
+
     list_display = (
         "id_reserva",
         "actividad",

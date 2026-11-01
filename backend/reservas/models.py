@@ -3,6 +3,7 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
 from .opciones import NACIONALIDADES
+from django.core.exceptions import ValidationError
 
 
 class EstadoReserva(models.Model):
@@ -202,6 +203,21 @@ class Reserva(models.Model):
     class Meta:
         db_table = "reserva"
 
+    def clean(self):
+        super().clean()
+
+        if (
+            self.horario_inicio
+            and self.horario_fin
+            and self.horario_inicio >= self.horario_fin
+        ):
+            raise ValidationError({
+                "horario_fin": (
+                    "La hora de fin debe ser posterior "
+                    "a la hora de inicio."
+                )
+            })
+
     def __str__(self):
         return f"{self.actividad.nombre} - {self.fecha_reserva}"
 
@@ -235,7 +251,12 @@ class UsuarioPorReserva(models.Model):
             models.UniqueConstraint(
                 fields=["reserva", "usuario"],
                 name="usuario_reserva_unico",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["reserva"],
+                condition=models.Q(solicitante=True),
+                name="un_solicitante_por_reserva",
+            ),
         ]
 
     def __str__(self):
@@ -324,8 +345,35 @@ class SolicitudEquipo(models.Model):
     class Meta:
         db_table = "solicitudPorEquipo"
 
+    def clean(self):
+        super().clean()
+
+        if self.cantidad_solicitada is not None:
+            if self.cantidad_solicitada < 1:
+                raise ValidationError({
+                    "cantidad_solicitada":
+                        "La cantidad solicitada debe ser mayor que cero."
+                })
+
+            if self.cantidad_critica is not None:
+                if self.cantidad_critica > self.cantidad_solicitada:
+                    raise ValidationError({
+                        "cantidad_critica":
+                            "La cantidad crítica no puede superar "
+                            "la cantidad solicitada."
+                    })
+
+            if self.cantidad_reservada is not None:
+                if self.cantidad_reservada > self.cantidad_solicitada:
+                    raise ValidationError({
+                        "cantidad_reservada":
+                            "La cantidad reservada no puede superar "
+                            "la cantidad solicitada."
+                    })
+
     def __str__(self):
         return f"{self.reserva} - {self.equipamiento}"
+
 
 
 class Participante(models.Model):
