@@ -344,6 +344,13 @@ class SolicitudEquipo(models.Model):
 
     class Meta:
         db_table = "solicitudPorEquipo"
+        constraints = [
+        models.UniqueConstraint(
+            fields=["reserva", "equipamiento"],
+            name="reserva_equipamiento_unico",
+        )
+    ]
+
 
     def clean(self):
         super().clean()
