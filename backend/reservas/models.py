@@ -4,6 +4,7 @@ from django.db import models
 from django.db.models import Q
 from .opciones import NACIONALIDADES
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 
 class EstadoReserva(models.Model):
@@ -464,8 +465,27 @@ class Participante(models.Model):
         blank=True,
     )
 
+    def clean(self):
+        super().clean()
+
+        if not self.numero_documento or not self.numero_documento.strip():
+           raise ValidationError({
+            "numero_documento": "El número de documento no puede estar vacío."
+           })
+
+        if self.fecha_nacimiento and self.fecha_nacimiento > timezone.localdate():
+           raise ValidationError({
+            "fecha_nacimiento": "La fecha de nacimiento no puede ser futura."
+           })
+
     class Meta:
         db_table = "participante"
+        constraints = [
+        models.UniqueConstraint(
+            fields=["tipo_documento", "numero_documento"],
+            name="participante_documento_unico"
+        )
+    ]
 
     def __str__(self):
         return f"{self.nombres} {self.apellidos}"

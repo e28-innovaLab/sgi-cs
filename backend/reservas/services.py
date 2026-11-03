@@ -1,5 +1,5 @@
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from espacios.models import Aula, Equipamiento
 from .models import (
@@ -8,6 +8,8 @@ from .models import (
     SolicitudEquipo,
     EstadoReserva,
     UsuarioPorReserva,
+    Participante,
+    ReservaParticipante,
 )
 
 
@@ -143,11 +145,6 @@ def obtener_equipamiento_disponible(
         for aula in aulas
     ]
 
-    if not aula_ids:
-        raise ValueError(
-            "Debe indicar al menos un aula para consultar equipamiento."
-        )
-
     equipamientos = Equipamiento.objects.filter(
         estado=Equipamiento.Estado.DISPONIBLE,
     )
@@ -230,3 +227,244 @@ def validar_solicitante_reserva(reserva):
             "Para confirmar la reserva debe existir exactamente "
             "un usuario solicitante."      
         )
+
+
+def solicitar_equipamiento_reserva(
+    reserva_id,
+    equipamiento_id,
+    cantidad_solicitada,
+    cantidad_critica,
+):
+    """
+    Crea o actualiza una solicitud de equipamiento para una reserva.
+
+    Comprueba la disponibilidad y compromete el stock dentro
+    de una transacción.
+    """
+
+    with transaction.atomic():
+
+        # 1. Bloqueamos la reserva.
+        try:
+            reserva = Reserva.objects.select_for_update().get(
+                pk=reserva_id
+            )
+        except Reserva.DoesNotExist:
+            raise ValidationError(
+                "La reserva indicada no existe."
+            )
+
+        # 2. Solo las reservas pendientes o confirmadas pueden
+        # comprometer equipamiento.
+        if (
+            reserva.estado_reserva is None
+            or reserva.estado_reserva.estado not in ESTADOS_QUE_BLOQUEAN
+        ):
+            raise ValidationError(
+                "Solo se puede solicitar equipamiento para "
+                "reservas pendientes o confirmadas."
+            )
+
+        # 3. Bloqueamos el equipamiento para evitar que dos
+        # operaciones comprometan simultáneamente las mismas unidades.
+        try:
+            equipamiento = Equipamiento.objects.select_for_update().get(
+                pk=equipamiento_id
+            )
+        except Equipamiento.DoesNotExist:
+            raise ValidationError(
+                "El equipamiento indicado no existe."
+            )
+
+        # 4. Buscamos si ya existe una solicitud de este equipo
+        # para esta reserva.
+        solicitud = SolicitudEquipo.objects.filter(
+            reserva=reserva,
+            equipamiento=equipamiento,
+        ).first()
+
+        # 5. Consultamos la disponibilidad excluyendo la propia
+        # reserva, para que su solicitud anterior no se cuente dos veces.
+        aulas = list(reserva.aulas.all())
+
+        equipamientos_disponibles = obtener_equipamiento_disponible(
+            fecha=reserva.fecha_reserva,
+            hora_inicio=reserva.horario_inicio,
+            hora_fin=reserva.horario_fin,
+            aulas=aulas,
+            excluir_reserva_id=reserva.pk,
+        )
+
+        disponibilidad = next(
+            (
+                item
+                for item in equipamientos_disponibles
+                if item["equipamiento"].pk == equipamiento.pk
+            ),
+            None,
+        )
+
+        if disponibilidad is None:
+            raise ValidationError(
+                "El equipamiento no está disponible para esta reserva."
+            )
+
+        # 6. Comprobamos que alcance el stock.
+        if cantidad_solicitada > disponibilidad["cantidad_disponible"]:
+            raise ValidationError(
+                f"Stock insuficiente. Cantidad disponible: "
+                f"{disponibilidad['cantidad_disponible']}."
+            )
+
+        # 7. Creamos o actualizamos la solicitud.
+        if solicitud is None:
+            solicitud = SolicitudEquipo(
+                reserva=reserva,
+                equipamiento=equipamiento,
+            )
+
+        solicitud.cantidad_solicitada = cantidad_solicitada
+        solicitud.cantidad_reservada = cantidad_solicitada
+        solicitud.cantidad_critica = cantidad_critica
+
+        # Ejecutamos las validaciones definidas en el modelo.
+        solicitud.full_clean()
+
+        solicitud.save()
+
+    return solicitud
+
+def eliminar_solicitud_equipamiento(
+    reserva_id,
+    equipamiento_id,
+):
+    """
+    Elimina una solicitud de equipamiento de una reserva.
+
+    La operación se realiza dentro de una transacción
+    para mantener la consistencia del stock.
+    """
+
+    with transaction.atomic():
+
+        # 1. Bloqueamos la reserva.
+        try:
+            reserva = Reserva.objects.select_for_update().get(
+                pk=reserva_id
+            )
+        except Reserva.DoesNotExist:
+            raise ValidationError(
+                "La reserva indicada no existe."
+            )
+
+        # 2. Bloqueamos el equipamiento.
+        try:
+            equipamiento = Equipamiento.objects.select_for_update().get(
+                pk=equipamiento_id
+            )
+        except Equipamiento.DoesNotExist:
+            raise ValidationError(
+                "El equipamiento indicado no existe."
+            )
+
+        # 3. Buscamos la solicitud.
+        solicitud = SolicitudEquipo.objects.filter(
+            reserva=reserva,
+            equipamiento=equipamiento,
+        ).first()
+
+        if solicitud is None:
+            raise ValidationError(
+                "No existe una solicitud para ese equipamiento."
+            )
+
+        # 4. Eliminamos la solicitud.
+        solicitud.delete()
+
+    return True
+
+
+def obtener_o_crear_participante(datos):
+    """
+    Busca un participante por tipo y número de documento.
+
+    Si ya existe, lo devuelve sin duplicarlo.
+    Si no existe, lo valida y lo crea.
+    """
+
+    tipo_documento = datos.get("tipo_documento")
+    numero_documento = datos.get("numero_documento")
+
+    if not tipo_documento:
+        raise ValidationError({
+            "tipo_documento": "Debe indicar el tipo de documento."
+        })
+
+    if not numero_documento or not numero_documento.strip():
+        raise ValidationError({
+            "numero_documento": "Debe indicar un número de documento válido."
+        })
+
+    participante = Participante.objects.filter(
+        tipo_documento=tipo_documento,
+        numero_documento=numero_documento,
+    ).first()
+
+    if participante:
+        return participante
+
+    participante = Participante(**datos)
+    participante.full_clean()
+
+    try:
+        with transaction.atomic():
+            participante.save()
+    except IntegrityError:
+        # Si otra operación creó el mismo participante al mismo tiempo,
+        # recuperamos el registro que ya existe.
+        participante = Participante.objects.get(
+            tipo_documento=tipo_documento,
+            numero_documento=numero_documento,
+        )
+
+    return participante
+
+
+def asociar_participante_reserva(
+    reserva_id,
+    participante_id,
+    rol="OTRO",
+):
+    """
+    Asocia un participante a una reserva.
+
+    Si ya está asociado, devuelve la asociación existente.
+    """
+
+    with transaction.atomic():
+
+        try:
+            reserva = Reserva.objects.select_for_update().get(
+                pk=reserva_id
+            )
+        except Reserva.DoesNotExist:
+            raise ValidationError(
+                "La reserva indicada no existe."
+            )
+
+        try:
+            participante = Participante.objects.select_for_update().get(
+                pk=participante_id
+            )
+        except Participante.DoesNotExist:
+            raise ValidationError(
+                "El participante indicado no existe."
+            )
+
+        asociacion, creada = ReservaParticipante.objects.get_or_create(
+            reserva=reserva,
+            participante=participante,
+            defaults={"rol": rol},
+        )
+
+    return asociacion
