@@ -1,11 +1,18 @@
-from datetime import date, time
+﻿from datetime import date, time
 
+from django.core.exceptions import ValidationError
 from rest_framework.test import APITestCase
 
 from espacios.models import Aula, Categoria, Equipamiento
 from usuarios.models import Rol, Usuario
 from .models import Actividad, EstadoReserva, Reserva, ReservaAula, SolicitudEquipo
-from .services import obtener_aulas_disponibles
+from .services import (
+    obtener_aulas_disponibles,
+    confirmar_reserva,
+    rechazar_reserva,
+    cancelar_reserva,
+    finalizar_reservas_vencidas,
+)
 
 
 class DisponibilidadAPITests(APITestCase):
@@ -25,7 +32,7 @@ class DisponibilidadAPITests(APITestCase):
 
     def reservar(self, estado='Pendiente', inicio=time(10), fin=time(12), fecha=None):
         actividad = Actividad.objects.create(
-            nombre="Práctica",
+            nombre="PrÃ¡ctica",
             tipo=Actividad.Tipo.CURSO,
             responsable=self.usuario,
             fecha_estimada=fecha or self.fecha,
@@ -33,15 +40,15 @@ class DisponibilidadAPITests(APITestCase):
             horario_fin_estimado=fin,
             participantes_estimados=10,
             )
-        
+
         reserva = Reserva.objects.create(
             actividad=actividad,
-            fecha_reserva=fecha or self.fecha, 
+            fecha_reserva=fecha or self.fecha,
             horario_inicio=inicio,
             horario_fin=fin,
             estado_reserva=EstadoReserva.objects.get(estado=estado),
             )
-        
+
         ReservaAula.objects.create(reserva=reserva, aula=self.aula)
         return reserva
 
@@ -104,7 +111,7 @@ class DisponibilidadAPITests(APITestCase):
         self.usuario.save()
         reserva = self.reservar()
         equipo = Equipamiento.objects.create(
-            nombre='Simulador', categoria=Categoria.objects.create(nombre='Simulación'),
+            nombre='Simulador', categoria=Categoria.objects.create(nombre='SimulaciÃ³n'),
             aula=self.otra_aula,
         )
         SolicitudEquipo.objects.create(
@@ -112,3 +119,103 @@ class DisponibilidadAPITests(APITestCase):
         )
         self.assertEqual(self.client.delete(f'/api/aulas/{self.aula.pk}/').status_code, 409)
         self.assertEqual(self.client.delete(f'/api/equipamientos/{equipo.pk}/').status_code, 409)
+
+
+    def test_estados_terminales_no_pueden_cambiarse(self):
+        estados_terminales = [
+            'Cancelada',
+            'Rechazada',
+            'Finalizada',
+        ]
+
+        estado_nuevo = EstadoReserva.objects.get(
+            estado='Confirmada'
+        )
+
+        for estado in estados_terminales:
+            with self.subTest(estado=estado):
+                reserva = self.reservar(estado=estado)
+
+                reserva.estado_reserva = estado_nuevo
+
+                with self.assertRaises(ValidationError):
+                    reserva.save()
+
+                reserva.refresh_from_db()
+
+                self.assertEqual(
+                    reserva.estado_reserva.estado,
+                    estado,
+                )
+
+    def test_estado_terminal_puede_guardarse_sin_cambiarlo(self):
+        reserva = self.reservar(estado='Cancelada')
+
+        reserva.detalle = 'ModificaciÃ³n administrativa'
+
+        reserva.save()
+
+        reserva.refresh_from_db()
+
+        self.assertEqual(
+            reserva.estado_reserva.estado,
+            'Cancelada',
+        )
+        self.assertEqual(
+            reserva.detalle,
+            'ModificaciÃ³n administrativa',
+        )
+
+
+    def test_servicios_no_modifican_estados_terminales(self):
+        estados_terminales = [
+            'Cancelada',
+            'Rechazada',
+            'Finalizada',
+        ]
+
+        operaciones = [
+            confirmar_reserva,
+            rechazar_reserva,
+            cancelar_reserva,
+        ]
+
+        for estado in estados_terminales:
+            reserva = self.reservar(estado=estado)
+
+            for operacion in operaciones:
+                with self.subTest(
+                    estado=estado,
+                    operacion=operacion.__name__,
+                ):
+                    with self.assertRaises(ValidationError):
+                        operacion(reserva.pk, self.usuario)
+
+            reserva.refresh_from_db()
+
+            self.assertEqual(
+                reserva.estado_reserva.estado,
+                estado,
+            )
+
+    def test_finalizacion_automatica_respeta_estados_terminales(self):
+        estados_terminales = [
+            'Cancelada',
+            'Rechazada',
+            'Finalizada',
+        ]
+
+        reservas = []
+
+        for estado in estados_terminales:
+            reservas.append(self.reservar(estado=estado))
+
+        finalizar_reservas_vencidas()
+
+        for reserva in reservas:
+            reserva.refresh_from_db()
+
+            self.assertIn(
+                reserva.estado_reserva.estado,
+                estados_terminales,
+            )

@@ -56,6 +56,16 @@ class ReservaAdminForm(forms.ModelForm):
             self.fields["estado_reserva"].queryset = estado_pendiente
             self.fields["estado_reserva"].initial = estado_pendiente.first()
 
+        elif (
+            self.instance.estado_reserva
+            and self.instance.estado_reserva.estado in [
+                EstadoReserva.Estados.CANCELADA,
+                EstadoReserva.Estados.RECHAZADA,
+                EstadoReserva.Estados.FINALIZADA,
+            ]
+        ):
+            self.fields["estado_reserva"].disabled = True
+
 
     def clean(self):
         cleaned_data = super().clean()

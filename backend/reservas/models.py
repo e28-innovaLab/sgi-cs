@@ -210,6 +210,7 @@ class Reserva(models.Model):
     def clean(self):
         super().clean()
 
+        # Validar que el horario de finalización sea posterior al inicio.
         if (
             self.horario_inicio
             and self.horario_fin
@@ -222,7 +223,42 @@ class Reserva(models.Model):
                 )
             })
 
+        # Validar que los estados terminales no puedan modificarse.
+        estados_terminales = [
+            EstadoReserva.Estados.CANCELADA,
+            EstadoReserva.Estados.RECHAZADA,
+            EstadoReserva.Estados.FINALIZADA,
+        ]
 
+        if self.pk:
+            estado_anterior = (
+                Reserva.objects
+                .filter(pk=self.pk)
+                .select_related("estado_reserva")
+                .first()
+            )
+
+            if (
+                estado_anterior
+                and estado_anterior.estado_reserva
+                and estado_anterior.estado_reserva.estado in estados_terminales
+            ):
+                estado_nuevo = (
+                    self.estado_reserva.estado
+                    if self.estado_reserva
+                    else None
+                )
+
+                if estado_nuevo != estado_anterior.estado_reserva.estado:
+                    raise ValidationError({
+                        "estado_reserva": (
+                            "No se puede modificar el estado de una reserva "
+                            "cancelada, rechazada o finalizada."
+                        )
+                    })
+
+        # Validar que las reservas pendientes o confirmadas
+        # tengan una fecha y hora de inicio futuras.
         estados_que_requieren_fecha_futura = [
             EstadoReserva.Estados.PENDIENTE,
             EstadoReserva.Estados.CONFIRMADA,
