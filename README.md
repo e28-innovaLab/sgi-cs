@@ -1,22 +1,86 @@
-# sgi-cs
-Sistema de gestión institucional inteligente para el centro de simulación.
+# SIGES - Sistema de Gestión Institucional Inteligente
 
-Backend con Django, Django REST Framework y PostgreSQL.
+Este proyecto forma parte del trabajo colaborativo de InnovaLab, para el desarrollo del Sistema de Gestión Institucional Inteligente del Centro de Simulación.
 
-El desarrollo del backend se organiza en cuatro etapas:
+Permite gestionar espacios, reservas, recursos y equipos del Centro de Simulación. Está compuesto por una aplicación web frontend y un backend que administra la lógica del sistema y el acceso a los datos.
 
-1. **Base del sistema:** proyecto, modelos, relaciones, migraciones, admin y primera consulta de disponibilidad. Es el trabajo inicial existente.
-2. **Acceso y gestión por API:** autenticación, roles, usuarios, aulas, categorías, equipamiento y estados. Implementada en esta entrega.
-3. **Operación de reservas:** actividades, responsables, participantes estimados, asignación de aulas y equipos, validaciones, confirmación/cancelación y agenda.
-4. **Integración y gestión inteligente:** importación CSV/Excel, indicadores, alertas, contratos para BI/IA, pruebas integrales y preparación del despliegue.
 
-La etapa 2 permite al frontend empezar a trabajar con usuarios y datos reales. La etapa 3 deberá validar las reservas en el servidor, dentro de transacciones; consultar disponibilidad no garantiza una asignación ante solicitudes simultáneas.
+## Estructura del repositorio
 
-Consultá [la guía de la etapa 2](backend/docs/ETAPA_2.md) para ver el alcance, los permisos, el contrato de la API, ejemplos y los siguientes pasos.
+El repositorio se organiza en dos módulos principales:
 
-## Puesta en marcha (PowerShell)
+```text
+sgi-cs/
+├── backend/
+│   └── Código del servidor y API
+├── frontend/
+│   └── Código de la aplicación web
+└── README.md
+```
 
-Requisitos: Python 3.13 y una base PostgreSQL local creada para el proyecto.
+
+## Tecnologías utilizadas
+
+### Frontend
+
+- React
+- JavaScript
+- HTML
+- CSS
+- Vite
+
+### Backend
+
+- Python 3.13
+- Django
+- Django REST Framework
+- PostgreSQL
+
+
+## Funcionalidades
+
+### Frontend
+
+La aplicación web cuenta con las siguientes funcionalidades:
+
+- Inicio de sesión.
+- Panel principal de gestión.
+- Visualización de espacios.
+- Gestión de reservas.
+- Gestión de recursos y equipos.
+- Navegación entre módulos.
+
+### Backend
+
+El backend proporciona una API para gestionar la información y las operaciones del sistema.
+
+Entre sus funcionalidades se encuentran:
+
+- Autenticación y gestión de usuarios.
+- Administración de roles y permisos.
+- Gestión de aulas y espacios.
+- Administración de categorías y equipamiento.
+- Gestión de reservas y sus estados.
+- Asociación de usuarios y participantes a las reservas.
+- Validaciones de fechas, horarios y disponibilidad.
+- Asignación de aulas y equipos.
+- Gestión de asistencia de participantes.
+- Automatización de estados de reservas según sus horarios.
+
+Para conocer más detalles sobre la API, sus permisos y sus funcionalidades, consultá la documentación disponible en `backend/docs/`.
+
+
+## Instalación y ejecución
+
+### Backend
+
+Requisitos:
+
+- Python 3.13.
+- PostgreSQL instalado y funcionando.
+- Una base de datos PostgreSQL creada para el proyecto.
+
+Desde la raíz del repositorio, ejecutá en PowerShell:
 
 ```powershell
 cd backend
@@ -25,27 +89,60 @@ python -m venv .venv
 Copy-Item .env.example .env
 ```
 
-Editá `.env` con tus credenciales PostgreSQL y una clave propia. Podés generar la clave con:
+Configurá el archivo `.env` con las credenciales de PostgreSQL y una clave secreta propia.
+
+Podés generar una clave secreta ejecutando:
 
 ```powershell
 .\.venv\Scripts\python.exe -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
 ```
 
-Luego:
+Luego ejecutá las migraciones y creá un superusuario:
 
 ```powershell
 .\.venv\Scripts\python.exe manage.py migrate
 .\.venv\Scripts\python.exe manage.py createsuperuser
+```
+
+Para iniciar el servidor de desarrollo:
+
+```powershell
 .\.venv\Scripts\python.exe manage.py runserver
 ```
 
-`migrate` crea los roles `ADMIN` y `COORDINACION`; `createsuperuser` asigna `ADMIN` y solicita los datos personales. No se incluyen cuentas ni contraseñas predeterminadas.
+El comando `migrate` crea los roles iniciales `ADMIN` y `COORDINACION`. El comando `createsuperuser` permite crear una cuenta administradora con el rol `ADMIN`.
 
-API: `http://127.0.0.1:8000/api/`. Administración de Django: `http://127.0.0.1:8000/admin/`.
+No se incluyen cuentas ni contraseñas predeterminadas.
 
-## Verificación
+Direcciones disponibles:
 
-Desde `backend`, para ejecutar las pruebas sin un servidor PostgreSQL:
+- API: http://127.0.0.1:8000/api/
+- Administración de Django: http://127.0.0.1:8000/admin/
+
+
+### Frontend
+
+Requisitos:
+
+- Node.js.
+- npm.
+
+Desde la raíz del repositorio, ejecutá:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Vite iniciará el servidor de desarrollo y mostrará en la terminal la dirección local para acceder a la aplicación web.
+
+
+## Verificación del backend
+
+Para ejecutar las pruebas y verificaciones del backend, ingresá primero a la carpeta `backend`.
+
+En PowerShell:
 
 ```powershell
 .\.venv\Scripts\python.exe manage.py test --settings=config.test_settings
@@ -53,4 +150,12 @@ Desde `backend`, para ejecutar las pruebas sin un servidor PostgreSQL:
 .\.venv\Scripts\python.exe manage.py makemigrations --check --dry-run --settings=config.test_settings
 ```
 
-Las pruebas usan SQLite en memoria, una base independiente que se destruye al terminar. La configuración normal conserva PostgreSQL. Para probar también con PostgreSQL configurado, ejecutá `python manage.py test`; el usuario de base de datos debe poder crear la base de pruebas.
+Las pruebas utilizan SQLite en memoria, una base de datos independiente que se destruye al finalizar. La configuración habitual del proyecto utiliza PostgreSQL.
+
+Para ejecutar las pruebas utilizando PostgreSQL, podés ejecutar:
+
+```powershell
+python manage.py test
+```
+
+En ese caso, el usuario de base de datos debe tener permisos para crear la base de datos de pruebas.

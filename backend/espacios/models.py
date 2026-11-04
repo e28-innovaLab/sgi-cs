@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.validators import MinValueValidator
+from django.core.exceptions import ValidationError
 
 
 class Aula(models.Model):
@@ -104,7 +105,10 @@ class Equipamiento(models.Model):
         db_column="idAula",
     )
 
-    cantidad = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+    cantidad = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+    )
 
     estado = models.CharField(
         max_length=20,
@@ -116,11 +120,22 @@ class Equipamiento(models.Model):
 
     trasladable = models.BooleanField(default=False)
 
-    def __str__(self):
-        return self.nombre
-
     class Meta:
         db_table = "equipamiento"
         verbose_name = "Equipamiento"
         verbose_name_plural = "Equipamientos"
+
+    def clean(self):
+        super().clean()
+
+        if not self.trasladable and not self.aula:
+            raise ValidationError({
+                "aula": (
+                    "El equipamiento no trasladable debe tener "
+                    "un aula asignada."
+                )
+            })
+
+    def __str__(self):
+        return self.nombre
 

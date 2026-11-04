@@ -3,6 +3,9 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
 from .opciones import NACIONALIDADES
+from django.core.exceptions import ValidationError
+from django.utils import timezone
+
 
 
 class EstadoReserva(models.Model):
@@ -12,6 +15,7 @@ class EstadoReserva(models.Model):
         CONFIRMADA = "Confirmada", "Confirmada"
         CANCELADA = "Cancelada", "Cancelada"
         RECHAZADA = "Rechazada", "Rechazada"
+        FINALIZADA = "Finalizada", "Finalizada"
 
     id_estado_reserva = models.AutoField(
         primary_key=True,
@@ -37,6 +41,7 @@ class EstadoReserva(models.Model):
                         "Confirmada",
                         "Cancelada",
                         "Rechazada",
+                        "Finalizada",
                     ]
                 ),
                 name="estado_reserva_valido",
@@ -202,6 +207,94 @@ class Reserva(models.Model):
     class Meta:
         db_table = "reserva"
 
+    def clean(self):
+        super().clean()
+
+        # Validar que el horario de finalización sea posterior al inicio.
+        if (
+            self.horario_inicio
+            and self.horario_fin
+            and self.horario_inicio >= self.horario_fin
+        ):
+            raise ValidationError({
+                "horario_fin": (
+                    "La hora de fin debe ser posterior "
+                    "a la hora de inicio."
+                )
+            })
+
+        # Validar que los estados terminales no puedan modificarse.
+        estados_terminales = [
+            EstadoReserva.Estados.CANCELADA,
+            EstadoReserva.Estados.RECHAZADA,
+            EstadoReserva.Estados.FINALIZADA,
+        ]
+
+        if self.pk:
+            estado_anterior = (
+                Reserva.objects
+                .filter(pk=self.pk)
+                .select_related("estado_reserva")
+                .first()
+            )
+
+            if (
+                estado_anterior
+                and estado_anterior.estado_reserva
+                and estado_anterior.estado_reserva.estado in estados_terminales
+            ):
+                estado_nuevo = (
+                    self.estado_reserva.estado
+                    if self.estado_reserva
+                    else None
+                )
+
+                if estado_nuevo != estado_anterior.estado_reserva.estado:
+                    raise ValidationError({
+                        "estado_reserva": (
+                            "No se puede modificar el estado de una reserva "
+                            "cancelada, rechazada o finalizada."
+                        )
+                    })
+
+        # Validar que las reservas pendientes o confirmadas
+        # tengan una fecha y hora de inicio futuras.
+        estados_que_requieren_fecha_futura = [
+            EstadoReserva.Estados.PENDIENTE,
+            EstadoReserva.Estados.CONFIRMADA,
+        ]
+
+        if (
+            self.estado_reserva
+            and self.estado_reserva.estado in estados_que_requieren_fecha_futura
+            and self.fecha_reserva
+            and self.horario_inicio
+        ):
+            ahora = timezone.localtime()
+
+            if self.fecha_reserva < ahora.date():
+                raise ValidationError({
+                    "fecha_reserva": (
+                        "No se puede crear una reserva pendiente "
+                        "o confirmada con una fecha pasada."
+                    )
+                })
+
+            if (
+                self.fecha_reserva == ahora.date()
+                and self.horario_inicio <= ahora.time()
+            ):
+                raise ValidationError({
+                    "horario_inicio": (
+                        "La hora de inicio debe ser posterior "
+                        "a la hora actual."
+                    )
+                })
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.actividad.nombre} - {self.fecha_reserva}"
 
@@ -235,7 +328,12 @@ class UsuarioPorReserva(models.Model):
             models.UniqueConstraint(
                 fields=["reserva", "usuario"],
                 name="usuario_reserva_unico",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["reserva"],
+                condition=models.Q(solicitante=True),
+                name="un_solicitante_por_reserva",
+            ),
         ]
 
     def __str__(self):
@@ -323,9 +421,43 @@ class SolicitudEquipo(models.Model):
 
     class Meta:
         db_table = "solicitudPorEquipo"
+        constraints = [
+        models.UniqueConstraint(
+            fields=["reserva", "equipamiento"],
+            name="reserva_equipamiento_unico",
+        )
+    ]
+
+
+    def clean(self):
+        super().clean()
+
+        if self.cantidad_solicitada is not None:
+            if self.cantidad_solicitada < 1:
+                raise ValidationError({
+                    "cantidad_solicitada":
+                        "La cantidad solicitada debe ser mayor que cero."
+                })
+
+            if self.cantidad_critica is not None:
+                if self.cantidad_critica > self.cantidad_solicitada:
+                    raise ValidationError({
+                        "cantidad_critica":
+                            "La cantidad crítica no puede superar "
+                            "la cantidad solicitada."
+                    })
+
+            if self.cantidad_reservada is not None:
+                if self.cantidad_reservada > self.cantidad_solicitada:
+                    raise ValidationError({
+                        "cantidad_reservada":
+                            "La cantidad reservada no puede superar "
+                            "la cantidad solicitada."
+                    })
 
     def __str__(self):
         return f"{self.reserva} - {self.equipamiento}"
+
 
 
 class Participante(models.Model):
@@ -409,8 +541,27 @@ class Participante(models.Model):
         blank=True,
     )
 
+    def clean(self):
+        super().clean()
+
+        if not self.numero_documento or not self.numero_documento.strip():
+           raise ValidationError({
+            "numero_documento": "El número de documento no puede estar vacío."
+           })
+
+        if self.fecha_nacimiento and self.fecha_nacimiento > timezone.localdate():
+           raise ValidationError({
+            "fecha_nacimiento": "La fecha de nacimiento no puede ser futura."
+           })
+
     class Meta:
         db_table = "participante"
+        constraints = [
+        models.UniqueConstraint(
+            fields=["tipo_documento", "numero_documento"],
+            name="participante_documento_unico"
+        )
+    ]
 
     def __str__(self):
         return f"{self.nombres} {self.apellidos}"
