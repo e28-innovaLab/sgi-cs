@@ -45,6 +45,18 @@ class ReservaAdminForm(forms.ModelForm):
         model = Reserva
         fields = "__all__"
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if not self.instance.pk:
+            estado_pendiente = EstadoReserva.objects.filter(
+               estado=EstadoReserva.Estados.PENDIENTE
+            )
+
+            self.fields["estado_reserva"].queryset = estado_pendiente
+            self.fields["estado_reserva"].initial = estado_pendiente.first()
+
+
     def clean(self):
         cleaned_data = super().clean()
 
@@ -79,12 +91,28 @@ class ReservaAdmin(admin.ModelAdmin):
     search_fields = ("actividad__nombre", "cod_reunion")
     ordering = ("-fecha_reserva",)
 
+    def save_model(self, request, obj, form, change):
+        if not change:
+           obj.estado_reserva = EstadoReserva.objects.get(
+               estado=EstadoReserva.Estados.PENDIENTE
+        )
+
+        super().save_model(request, obj, form, change)
+
 
 @admin.register(ReservaAula)
 class ReservaAulaAdmin(admin.ModelAdmin):
     list_display = ("id_reserva_por_aula", "reserva", "aula", "estado_reserva")
     list_filter = ("estado_reserva",)
 
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(SolicitudEquipo)
@@ -132,6 +160,14 @@ class UsuarioPorReservaAdmin(admin.ModelAdmin):
     list_filter = ("solicitante",)
     search_fields = ("usuario__username", "reserva__actividad__nombre")
 
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Participante)
@@ -181,3 +217,12 @@ class ReservaParticipanteAdmin(admin.ModelAdmin):
         "participante__apellidos",
         "reserva__actividad__nombre",
     )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 
+
 class EstadoReserva(models.Model):
 
     class Estados(models.TextChoices):
@@ -14,6 +15,7 @@ class EstadoReserva(models.Model):
         CONFIRMADA = "Confirmada", "Confirmada"
         CANCELADA = "Cancelada", "Cancelada"
         RECHAZADA = "Rechazada", "Rechazada"
+        FINALIZADA = "Finalizada", "Finalizada"
 
     id_estado_reserva = models.AutoField(
         primary_key=True,
@@ -39,6 +41,7 @@ class EstadoReserva(models.Model):
                         "Confirmada",
                         "Cancelada",
                         "Rechazada",
+                        "Finalizada",
                     ]
                 ),
                 name="estado_reserva_valido",
@@ -218,6 +221,43 @@ class Reserva(models.Model):
                     "a la hora de inicio."
                 )
             })
+
+
+        estados_que_requieren_fecha_futura = [
+            EstadoReserva.Estados.PENDIENTE,
+            EstadoReserva.Estados.CONFIRMADA,
+        ]
+
+        if (
+            self.estado_reserva
+            and self.estado_reserva.estado in estados_que_requieren_fecha_futura
+            and self.fecha_reserva
+            and self.horario_inicio
+        ):
+            ahora = timezone.localtime()
+
+            if self.fecha_reserva < ahora.date():
+                raise ValidationError({
+                    "fecha_reserva": (
+                        "No se puede crear una reserva pendiente "
+                        "o confirmada con una fecha pasada."
+                    )
+                })
+
+            if (
+                self.fecha_reserva == ahora.date()
+                and self.horario_inicio <= ahora.time()
+            ):
+                raise ValidationError({
+                    "horario_inicio": (
+                        "La hora de inicio debe ser posterior "
+                        "a la hora actual."
+                    )
+                })
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.actividad.nombre} - {self.fecha_reserva}"
