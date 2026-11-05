@@ -238,6 +238,9 @@ Esta etapa no expone altas o modificaciones de reservas por API. Los modelos y e
 
 Los equipos existentes con estado vacío o sin ubicación deben revisarse al completar la carga inicial. Las nuevas validaciones de equipos se aplican en la API; no se hace una normalización automática de datos anteriores ni se crean reglas nuevas de reserva.
 
+Los endpoints de indicadores, las reglas de alertas y la consolidación de información
+histórica incorporados posteriormente se documentan en [Reportes y alertas](REPORTES_Y_ALERTAS.md).
+
 ## Cómo desarrollar la etapa 3 sobre esta base
 
 1. Acordar el flujo de estados de reserva y normalizar datos anteriores sin estado. Completar el modelo de actividad/reserva con responsable y cantidad estimada de participantes, conservando las tablas existentes cuando sea posible.

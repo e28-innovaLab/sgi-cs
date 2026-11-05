@@ -20,6 +20,7 @@ urlpatterns = [
     path('api/auth/logout/', LogoutView.as_view(), name='logout'),
     path('api/auth/me/', PerfilView.as_view(), name='perfil'),
     path('api/', include(router.urls)),
+    path('api/', include('reportes.urls')),
     path(
         "api/aulas-disponibles/",
         aulas_disponibles,

@@ -126,6 +126,10 @@ def asignar_aulas_reserva(reserva_id, aulas_ids):
             for aula in aulas
         ])
 
+        # bulk_create no emite post_save; consolidar la asignación completa.
+        from reportes.history import registrar_reserva
+        registrar_reserva(reserva.pk, 'RELACIONES')
+
     return aulas
 
 
