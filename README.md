@@ -1,13 +1,10 @@
 # SIGES - Sistema de Gestión Institucional Inteligente
 
-Este proyecto forma parte del trabajo colaborativo de InnovaLab, para el desarrollo del Sistema de Gestión Institucional Inteligente del Centro de Simulación.
+Este proyecto forma parte del trabajo colaborativo de InnovaLab para el desarrollo del Sistema de Gestión Institucional Inteligente del Centro de Simulación.
 
 Permite gestionar espacios, reservas, recursos y equipos del Centro de Simulación. Está compuesto por una aplicación web frontend y un backend que administra la lógica del sistema y el acceso a los datos.
 
-
 ## Estructura del repositorio
-
-El repositorio se organiza en dos módulos principales:
 
 ```text
 sgi-cs/
@@ -18,11 +15,9 @@ sgi-cs/
 └── README.md
 ```
 
-
 ## Tecnologías utilizadas
 
 ### Frontend
-
 - React
 - JavaScript
 - HTML
@@ -30,12 +25,10 @@ sgi-cs/
 - Vite
 
 ### Backend
-
 - Python 3.13
 - Django
 - Django REST Framework
 - PostgreSQL
-
 
 ## Funcionalidades
 
@@ -68,7 +61,6 @@ Entre sus funcionalidades se encuentran:
 - Automatización de estados de reservas según sus horarios.
 
 Para conocer más detalles sobre la API, sus permisos y sus funcionalidades, consultá la documentación disponible en `backend/docs/`.
-
 
 ## Instalación y ejecución
 
@@ -119,7 +111,6 @@ Direcciones disponibles:
 - API: http://127.0.0.1:8000/api/
 - Administración de Django: http://127.0.0.1:8000/admin/
 
-
 ### Frontend
 
 Requisitos:
@@ -129,14 +120,13 @@ Requisitos:
 
 Desde la raíz del repositorio, ejecutá:
 
-```bash
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
 Vite iniciará el servidor de desarrollo y mostrará en la terminal la dirección local para acceder a la aplicación web.
-
 
 ## Verificación del backend
 
