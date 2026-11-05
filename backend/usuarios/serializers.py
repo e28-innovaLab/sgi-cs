@@ -34,9 +34,14 @@ class LoginSerializer(serializers.Serializer):
         return {'usuario': usuario}
 
 
+class EstadoActivoField(serializers.BooleanField):
+    # Una omisión en JSON o formularios conserva el estado o el default del modelo.
+    default_empty_html = serializers.empty
+
+
 class UsuarioSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, trim_whitespace=False)
-    is_active = serializers.BooleanField(required=False)
+    is_active = EstadoActivoField(required=False)
     rol = serializers.PrimaryKeyRelatedField(
         queryset=Rol.objects.filter(nombre__in=[Rol.ADMIN, Rol.COORDINACION]),
     )

@@ -167,6 +167,23 @@ class UsuariosAPITests(APITestCase):
         self.assertEqual(response.status_code, 201, response.data)
         self.assertFalse(Usuario.objects.get(pk=response.data['id_usuario']).is_active)
 
+    def test_formulario_sin_is_active_crea_activo_y_conserva_inactivo_al_editar(self):
+        self.autenticar(self.admin)
+        datos = self.datos_usuario()
+        response = self.client.post('/api/usuarios/', datos, format='multipart')
+        self.assertEqual(response.status_code, 201, response.data)
+        usuario = Usuario.objects.get(pk=response.data['id_usuario'])
+        self.assertTrue(usuario.is_active)
+        usuario.is_active = False
+        usuario.save(update_fields=['is_active'])
+        datos.pop('password')
+        for metodo in [self.client.put, self.client.patch]:
+            with self.subTest(metodo=metodo.__name__):
+                response = metodo(f'/api/usuarios/{usuario.pk}/', datos, format='multipart')
+                self.assertEqual(response.status_code, 200, response.data)
+                usuario.refresh_from_db()
+                self.assertFalse(usuario.is_active)
+
     def test_admin_no_puede_desactivarse_ni_quitarse_su_rol(self):
         self.autenticar(self.admin)
         for cambios in [{'is_active': False}, {'rol': self.rol_coordinacion.pk}]:
