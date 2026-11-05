@@ -1,3 +1,4 @@
+
 import { useState } from 'react'
 import './App.css'
 import Login from './components/Login'
@@ -116,6 +117,25 @@ function App() {
       return
     }
 
+    // Verificar si el espacio ya tiene una reserva en ese horario.
+    const conflictoEspacio = reservas.some((reserva) => {
+      const mismaFecha = reserva.fecha === fecha
+      const mismoEspacio = reserva.espacio === espacio
+
+      const horariosSeSuperponen =
+        horaInicio < reserva.horaFin && horaFin > reserva.horaInicio
+
+      return mismaFecha && mismoEspacio && horariosSeSuperponen
+    })
+
+    if (conflictoEspacio) {
+      setTipoMensajeReserva('error')
+      setMensajeReserva(
+        `El ${espacio} ya tiene una reserva en ese horario. Probá con otro horario o elegí otro espacio.`
+      )
+      return
+    }
+
     const nuevaReserva = {
       id: Date.now(),
       actividad,
@@ -134,7 +154,7 @@ function App() {
 
     setEspacioReserva(
       espacios.find((item) => item.estado !== 'Mantenimiento')?.nombre ||
-        espacios[0].nombre
+      espacios[0].nombre
     )
 
     setTipoMensajeReserva('exito')
@@ -215,7 +235,6 @@ function App() {
 
         <div className="menu-label">MENÚ PRINCIPAL</div>
 
-
         <nav className="menu">
           <a
             className={`menu-item ${seccionActiva === 'inicio' ? 'active' : ''}`}
@@ -257,7 +276,6 @@ function App() {
             ▦ <span>Calendario</span>
           </a>
         </nav>
-
 
         <div className="sidebar-bottom">
           <div className="user-avatar">VH</div>
@@ -308,39 +326,83 @@ function App() {
         <section className="stats-grid">
           <article className="stat-card">
             <div className="stat-icon blue">▣</div>
-            <span>Espacios registrados</span>
-            <strong>{espacios.length}</strong>
-            <small>Espacios en el sistema</small>
+            <span>Reservas de la semana</span>
+            <strong>—</strong>
+            <small>Reservas registradas esta semana</small>
           </article>
 
           <article className="stat-card">
             <div className="stat-icon green">✓</div>
-            <span>Disponibles ahora</span>
-            <strong>
-              {espacios.filter((espacio) => espacio.estado === 'Disponible').length}
-            </strong>
-            <small>Con estado disponible</small>
+            <span>Asistencia real</span>
+            <strong>—</strong>
+            <small>Asistencias registradas</small>
           </article>
 
           <article className="stat-card">
             <div className="stat-icon orange">◷</div>
-            <span>Solicitudes pendientes</span>
-            <strong>
-              {reservas.filter((reserva) => reserva.estado === 'Pendiente').length}
-            </strong>
-            <small>Requieren seguimiento</small>
+            <span>Cancelaciones</span>
+            <strong>—</strong>
+            <small>Reservas canceladas</small>
           </article>
 
           <article className="stat-card">
             <div className="stat-icon purple">▤</div>
-            <span>Recursos disponibles</span>
+            <span>Pedidos pendientes</span>
             <strong>
-              {recursos
-                .filter((recurso) => recurso.estado === 'Disponible')
-                .reduce((total, recurso) => total + recurso.cantidad, 0)}
+              {reservas.filter((reserva) => reserva.estado === 'Pendiente').length}
             </strong>
-            <small>Unidades disponibles registradas</small>
+            <small>Solicitudes pendientes de revisión</small>
           </article>
+        </section>
+
+        {/* Gráfico único: comparación de los seis espacios */}
+        <section className="panel asistencia-panel">
+          <div className="panel-heading">
+            <div>
+              <h3>Reservado vs. asistió por espacios</h3>
+              <p>Comparación entre reservas y asistencia real</p>
+            </div>
+          </div>
+
+          <div className="grafico-leyenda">
+            <span>
+              <i className="leyenda-reservado"></i>
+              Reservado
+            </span>
+
+            <span>
+              <i className="leyenda-asistio"></i>
+              Asistió
+            </span>
+          </div>
+
+          <div className="grafico-espacios">
+            {[
+              { nombre: 'Aula 01', asistio: 19, reservado: 35 },
+              { nombre: 'SUM', asistio: 25, reservado: 80 },
+              { nombre: 'Aula Master', asistio: 23, reservado: 33 },
+              { nombre: 'Lab Simulación', asistio: 26, reservado: 30 },
+              { nombre: 'Lab Informática', asistio: 21, reservado: 28 },
+              { nombre: 'Aula Robótica', asistio: 17, reservado: 22 },
+            ].map((espacio) => (
+              <div className="grafico-fila" key={espacio.nombre}>
+                <div className="grafico-info">
+                  <strong>{espacio.nombre}</strong>
+                  <span>{espacio.asistio}/{espacio.reservado}</span>
+                </div>
+
+                <div className="grafico-barras">
+                  <div className="barra barra-reservado"></div>
+                  <div
+                    className="barra barra-asistio"
+                    style={{
+                      width: `${(espacio.asistio / espacio.reservado) * 100}%`,
+                    }}
+                  ></div>
+                </div>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section className="content-grid">
@@ -832,13 +894,12 @@ function App() {
                   <span className="space-icon">📦</span>
 
                   <span
-                    className={`status ${
-                      recurso.estado === 'Disponible'
-                        ? 'available'
-                        : recurso.estado === 'Mantenimiento'
-                          ? 'maintenance'
-                          : ''
-                    }`}
+                    className={`status ${recurso.estado === 'Disponible'
+                      ? 'available'
+                      : recurso.estado === 'Mantenimiento'
+                        ? 'maintenance'
+                        : ''
+                      }`}
                   >
                     {recurso.estado}
                   </span>
