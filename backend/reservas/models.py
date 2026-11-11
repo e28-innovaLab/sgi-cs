@@ -121,13 +121,19 @@ class Actividad(models.Model):
 
     def clean(self):
         super().clean()
+        # No permitir actividades los sábados ni domingos.
+        if self.fecha_estimada and self.fecha_estimada.weekday() >= 5:
+            raise ValidationError({
+                "fecha_estimada": (
+                    "No se pueden programar actividades los sábados ni domingos."
+                )
+            })
+
         if (
             self.horario_inicio_estimado is not None
             and self.horario_fin_estimado is not None
             and self.horario_inicio_estimado >= self.horario_fin_estimado
         ):
-            from django.core.exceptions import ValidationError
-
             raise ValidationError({
                 "horario_fin_estimado":
                     "La hora de fin debe ser posterior a la hora de inicio."
@@ -209,6 +215,13 @@ class Reserva(models.Model):
 
     def clean(self):
         super().clean()
+        # No permitir reservas los sábados ni domingos.
+        if self.fecha_reserva and self.fecha_reserva.weekday() >= 5:
+            raise ValidationError({
+                "fecha_reserva": (
+                "No se pueden realizar reservas los sábados ni domingos."
+                )
+            })
 
         # Validar que el horario de finalización sea posterior al inicio.
         if (

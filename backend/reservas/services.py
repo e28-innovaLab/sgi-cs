@@ -112,7 +112,24 @@ def asignar_aulas_reserva(reserva_id, aulas_ids):
                 "Una o más aulas ya están ocupadas "
                 "en ese día y horario."
             )
+        # Calculamos la capacidad total de las nuevas aulas.
+        capacidad_total = sum(
+            aula.capacidad for aula in aulas
+        )
 
+        # Contamos los participantes asociados a la reserva.
+        cantidad_participantes = ReservaParticipante.objects.filter(
+            reserva=reserva,
+        ).count()
+
+        # Impedimos asignar aulas con capacidad insuficiente.
+        if capacidad_total < cantidad_participantes:
+            raise ValidationError(
+                "La capacidad total de las aulas seleccionadas "
+                "no puede ser menor que la cantidad de participantes "
+                "asociados a la reserva."
+            )
+        
         # Reemplazamos las aulas anteriores por las nuevas.
         ReservaAula.objects.filter(
             reserva=reserva,
@@ -531,6 +548,7 @@ def obtener_o_crear_participante(datos):
     return participante
 
 
+
 def asociar_participante_reserva(
     reserva_id,
     participante_id,
@@ -540,7 +558,8 @@ def asociar_participante_reserva(
     Asocia un participante a una reserva.
 
     Si ya está asociado, devuelve la asociación existente.
-    Valida que el rol sea uno de los permitidos.
+    Valida que el rol sea uno de los permitidos
+    y que no se supere la capacidad total de las aulas.
     """
 
     roles_validos = dict(ReservaParticipante.ROL_CHOICES)
@@ -569,6 +588,35 @@ def asociar_participante_reserva(
             raise ValidationError(
                 "El participante indicado no existe."
             )
+
+        # Si el participante ya está asociado, devolver la asociación.
+        asociacion_existente = ReservaParticipante.objects.filter(
+            reserva=reserva,
+            participante=participante,
+        ).first()
+
+        if asociacion_existente:
+            return asociacion_existente
+
+        # Calcular la capacidad total de las aulas asociadas.
+        capacidad_total = sum(
+            reserva.aulas.values_list("capacidad", flat=True)
+        )
+
+        # Contar los participantes que ya tiene la reserva.
+        cantidad_participantes = ReservaParticipante.objects.filter(
+            reserva=reserva
+        ).count()
+
+        # Impedir que se supere la capacidad disponible.
+        if cantidad_participantes >= capacidad_total:
+            raise ValidationError({
+                "participante": (
+                    "No se puede agregar el participante porque "
+                    "se alcanzó la capacidad total de las aulas "
+                    "asociadas a la reserva."
+                )
+            })
 
         asociacion, creada = ReservaParticipante.objects.get_or_create(
             reserva=reserva,
@@ -701,19 +749,6 @@ def _obtener_estado_reserva(estado):
         )
 
 
-def _es_coordinacion(usuario):
-    return bool(
-        usuario.is_authenticated
-        and usuario.is_active
-        and hasattr(usuario, "rol")
-        and usuario.rol.nombre == Rol.COORDINACION
-    )
-
-
-def _es_administrador_o_coordinacion(usuario):
-    return es_administrador(usuario) or _es_coordinacion(usuario)
-
-
 def _es_solicitante(reserva, usuario):
     return UsuarioPorReserva.objects.filter(
         reserva=reserva,
@@ -724,7 +759,7 @@ def _es_solicitante(reserva, usuario):
 
 def _puede_operar_reserva(reserva, usuario):
     return (
-        _es_administrador_o_coordinacion(usuario)
+        es_administrador(usuario)
         or _es_solicitante(reserva, usuario)
     )
 
@@ -884,9 +919,9 @@ def confirmar_reserva(reserva_id, usuario):
         except Reserva.DoesNotExist:
             raise ValidationError("La reserva indicada no existe.")
 
-        if not _puede_operar_reserva(reserva, usuario):
+        if not es_administrador(usuario):
             raise ValidationError(
-                "No tenés permisos para confirmar esta reserva."
+                "Solamente Administración puede confirmar esta reservas."
             )
 
         if (
@@ -921,10 +956,9 @@ def rechazar_reserva(reserva_id, usuario):
         except Reserva.DoesNotExist:
             raise ValidationError("La reserva indicada no existe.")
 
-        if not _es_administrador_o_coordinacion(usuario):
+        if not es_administrador(usuario):
             raise ValidationError(
-                "Solamente Administración o Coordinación "
-                "pueden rechazar reservas."
+                "Solamente Administración puede rechazar reservas."
             )
 
         if (

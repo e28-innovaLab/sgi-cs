@@ -5,6 +5,7 @@ from django.db import models
 class Rol(models.Model):
     ADMIN = 'ADMIN'
     COORDINACION = 'COORDINACION'
+    SOLICITANTE = 'SOLICITANTE'
 
     id_rol = models.AutoField(
         primary_key=True,
