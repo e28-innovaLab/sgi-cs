@@ -1,13 +1,12 @@
 from datetime import datetime
-
 from django.utils import timezone
 
 from usuarios.models import Rol, Usuario
 from usuarios.permissions import es_administrador
 
-
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models import Sum
 
 from espacios.models import Aula, Equipamiento
 from .models import (
@@ -55,12 +54,172 @@ def obtener_aulas_disponibles(fecha, hora_inicio, hora_fin):
     ).order_by("nombre")
 
 
+def _asociar_equipamiento_fijo_disponible(reserva, aulas):
+    """
+    Asocia automáticamente los equipamientos fijos disponibles
+    pertenecientes a las aulas indicadas.
+    """
+    for aula in aulas:
+
+        # Bloqueamos los equipamientos fijos disponibles del aula.
+        equipamientos = (
+            Equipamiento.objects
+            .select_for_update()
+            .filter(
+                aula=aula,
+                trasladable=False,
+                estado=Equipamiento.Estado.DISPONIBLE,
+            )
+            .order_by("pk")
+        )
+
+        # Consultamos la disponibilidad una sola vez por aula.
+        disponibilidad = obtener_equipamiento_disponible(
+            fecha=reserva.fecha_reserva,
+            hora_inicio=reserva.horario_inicio,
+            hora_fin=reserva.horario_fin,
+            aulas=[aula],
+            excluir_reserva_id=reserva.pk,
+        )
+
+        for equipo in equipamientos:
+
+            # Si ya existe una solicitud, no se duplica ni se modifica.
+            solicitud_existente = SolicitudEquipo.objects.filter(
+                reserva=reserva,
+                equipamiento=equipo,
+            ).exists()
+
+            if solicitud_existente:
+                continue
+
+            item = next(
+                (
+                    elemento
+                    for elemento in disponibilidad
+                    if elemento["equipamiento"].pk == equipo.pk
+                ),
+                None,
+            )
+
+            # Si no hay stock disponible, se omite el equipamiento.
+            if item is None:
+                continue
+
+            cantidad = item["cantidad_disponible"]
+
+            solicitud = SolicitudEquipo(
+                reserva=reserva,
+                equipamiento=equipo,
+                cantidad_solicitada=cantidad,
+                cantidad_reservada=cantidad,
+                cantidad_critica=1,
+                asignacion_automatica=True,
+            )
+
+            solicitud.full_clean()
+            solicitud.save()
+
+
+def quitar_aula_reserva(reserva_id, aula_id):
+    """
+    Quita un aula de una reserva si no tiene solicitudes
+    de equipamiento fijo asociadas y la capacidad restante
+    es suficiente para los participantes.
+    """
+
+    with transaction.atomic():
+
+        # Bloqueamos la reserva.
+        try:
+            reserva = Reserva.objects.select_for_update().get(
+                pk=reserva_id
+            )
+        except Reserva.DoesNotExist:
+            raise ValidationError(
+                "La reserva indicada no existe."
+            )
+
+        # Bloqueamos el aula.
+        try:
+            aula = Aula.objects.select_for_update().get(
+                pk=aula_id
+            )
+        except Aula.DoesNotExist:
+            raise ValidationError(
+                "El aula indicada no existe."
+            )
+
+        # Comprobamos que el aula esté asociada a la reserva.
+        try:
+            reserva_aula = ReservaAula.objects.select_for_update().get(
+                reserva=reserva,
+                aula=aula,
+            )
+        except ReservaAula.DoesNotExist:
+            raise ValidationError(
+                "El aula indicada no está asociada a esta reserva."
+            )
+
+        # Comprobamos si existen solicitudes de equipamiento fijo
+        # pertenecientes al aula que queremos quitar.
+        solicitudes_fijas = SolicitudEquipo.objects.filter(
+            reserva=reserva,
+            equipamiento__aula=aula,
+            equipamiento__trasladable=False,
+        )
+
+        if solicitudes_fijas.exists():
+            raise ValidationError(
+                "No se puede quitar el aula porque tiene solicitudes "
+                "de equipamiento fijo asociadas. Primero debe eliminar "
+                "esas solicitudes."
+            )
+
+        # Calculamos la capacidad de las aulas restantes.
+        aulas_restantes_ids = ReservaAula.objects.filter(
+            reserva=reserva,
+        ).exclude(
+            aula=aula,
+        ).values_list(
+            "aula_id",
+            flat=True,
+        )
+
+        capacidad_restante = Aula.objects.filter(
+            pk__in=aulas_restantes_ids,
+        ).aggregate(
+            total=Sum("capacidad")
+        )["total"] or 0
+
+        # Contamos los participantes de la reserva.
+        cantidad_participantes = ReservaParticipante.objects.filter(
+            reserva=reserva,
+        ).count()
+
+        if capacidad_restante < cantidad_participantes:
+            raise ValidationError(
+                "No se puede quitar el aula porque la capacidad "
+                "de las aulas restantes sería insuficiente "
+                "para los participantes."
+            )
+
+        # Eliminamos la asociación.
+        reserva_aula.delete()
+
+    # Devolvemos las aulas que siguen asociadas.
+    return [
+        relacion.aula
+        for relacion in ReservaAula.objects.filter(
+            reserva=reserva,
+        ).select_related("aula").order_by("aula_id")
+    ]
+
+
 def asignar_aulas_reserva(reserva_id, aulas_ids):
     """
-    Reemplaza las aulas de una reserva por las nuevas seleccionadas.
-
-    Comprueba la disponibilidad y realiza toda la operación
-    dentro de una transacción.
+    Agrega aulas a una reserva y asocia automáticamente
+    sus equipamientos fijos disponibles.
     """
 
     aulas_ids = sorted(set(aulas_ids))
@@ -72,7 +231,7 @@ def asignar_aulas_reserva(reserva_id, aulas_ids):
 
     with transaction.atomic():
 
-        # Bloqueamos la reserva que estamos modificando.
+        # Bloqueamos la reserva.
         try:
             reserva = Reserva.objects.select_for_update().get(
                 pk=reserva_id
@@ -95,16 +254,28 @@ def asignar_aulas_reserva(reserva_id, aulas_ids):
                 "Una o más aulas no existen o no están disponibles."
             )
 
-        # Comprobamos que las aulas no estén ocupadas
-        # por otras reservas en el mismo horario.
+        # Recuperamos las aulas que ya tiene la reserva.
+        aulas_existentes_ids = set(
+            ReservaAula.objects.filter(
+                reserva=reserva,
+            ).values_list("aula_id", flat=True)
+        )
+
+        # Solo agregamos las aulas que todavía no están asociadas.
+        nuevas_aulas = [
+            aula for aula in aulas
+            if aula.pk not in aulas_existentes_ids
+        ]
+
+        # Comprobamos disponibilidad de las nuevas aulas.
         asignaciones_ocupadas = ReservaAula.objects.filter(
-            aula_id__in=aulas_ids,
+            aula_id__in=[aula.pk for aula in nuevas_aulas],
             reserva__fecha_reserva=reserva.fecha_reserva,
             reserva__estado_reserva__estado__in=ESTADOS_QUE_BLOQUEAN,
             reserva__horario_inicio__lt=reserva.horario_fin,
             reserva__horario_fin__gt=reserva.horario_inicio,
         ).exclude(
-            reserva_id=reserva.id_reserva,
+            reserva_id=reserva.pk,
         )
 
         if asignaciones_ocupadas.exists():
@@ -112,42 +283,69 @@ def asignar_aulas_reserva(reserva_id, aulas_ids):
                 "Una o más aulas ya están ocupadas "
                 "en ese día y horario."
             )
-        # Calculamos la capacidad total de las nuevas aulas.
-        capacidad_total = sum(
-            aula.capacidad for aula in aulas
-        )
 
-        # Contamos los participantes asociados a la reserva.
+        # Calculamos la capacidad total de todas las aulas.
+        capacidad_total = Aula.objects.filter(
+            pk__in=aulas_existentes_ids.union(aulas_ids)
+        ).aggregate(
+            total=Sum("capacidad")
+        )["total"] or 0
+
         cantidad_participantes = ReservaParticipante.objects.filter(
             reserva=reserva,
         ).count()
 
-        # Impedimos asignar aulas con capacidad insuficiente.
         if capacidad_total < cantidad_participantes:
             raise ValidationError(
                 "La capacidad total de las aulas seleccionadas "
-                "no puede ser menor que la cantidad de participantes "
-                "asociados a la reserva."
+                "no puede ser menor que la cantidad de participantes."
             )
-        
-        # Reemplazamos las aulas anteriores por las nuevas.
-        ReservaAula.objects.filter(
-            reserva=reserva,
-        ).delete()
 
+        # Comprobamos que no se quiten aulas que tengan
+        # solicitudes de equipamiento fijo asociadas.
+        solicitudes_fijas = SolicitudEquipo.objects.filter(
+            reserva=reserva,
+            equipamiento__trasladable=False,
+        ).select_related("equipamiento")
+
+        aulas_necesarias = {
+            solicitud.equipamiento.aula_id
+            for solicitud in solicitudes_fijas
+        }
+
+        aulas_resultantes_ids = aulas_existentes_ids.union(aulas_ids)
+
+        if not aulas_necesarias.issubset(aulas_resultantes_ids):
+            raise ValidationError(
+                "No se pueden quitar aulas que tengan solicitudes "
+                "de equipamiento fijo asociadas."
+            )
+
+        # Agregamos las nuevas aulas sin eliminar las anteriores.
         ReservaAula.objects.bulk_create([
             ReservaAula(
                 reserva=reserva,
                 aula=aula,
             )
-            for aula in aulas
+            for aula in nuevas_aulas
         ])
 
-        # bulk_create no emite post_save; consolidar la asignación completa.
+        # Asociamos automáticamente los equipamientos fijos disponibles.
+        _asociar_equipamiento_fijo_disponible(
+            reserva,
+            nuevas_aulas,
+        )
+
+        # bulk_create no emite post_save; registrar aulas y equipos ya asignados.
         from reportes.history import registrar_reserva
         registrar_reserva(reserva.pk, 'RELACIONES')
 
-    return aulas
+    return [
+        relacion.aula
+        for relacion in ReservaAula.objects.filter(
+            reserva=reserva,
+        ).select_related("aula").order_by("aula_id")
+    ]
 
 
 def obtener_equipamiento_disponible(
@@ -165,7 +363,7 @@ def obtener_equipamiento_disponible(
     """
 
     if hora_inicio >= hora_fin:
-        raise ValueError(
+        raise ValidationError(
             "La hora de fin debe ser posterior a la hora de inicio."
         )
 
@@ -254,7 +452,7 @@ def validar_solicitante_reserva(reserva):
     if cantidad_solicitantes != 1:
         raise ValidationError(
             "Para confirmar la reserva debe existir exactamente "
-            "un usuario solicitante."      
+            "un usuario solicitante."
         )
 
 
@@ -356,7 +554,10 @@ def solicitar_equipamiento_reserva(
     cantidad_critica,
 ):
     """
-    Crea o actualiza una solicitud de equipamiento para una reserva.
+    Crea o actualiza una solicitud expresa de equipamiento.
+
+    Si el equipamiento es fijo, asocia automáticamente su aula
+    a la reserva cuando todavía no está asociada.
 
     Comprueba la disponibilidad y compromete el stock dentro
     de una transacción.
@@ -364,7 +565,7 @@ def solicitar_equipamiento_reserva(
 
     with transaction.atomic():
 
-        # 1. Bloqueamos la reserva.
+        # Bloqueamos la reserva.
         try:
             reserva = Reserva.objects.select_for_update().get(
                 pk=reserva_id
@@ -374,7 +575,7 @@ def solicitar_equipamiento_reserva(
                 "La reserva indicada no existe."
             )
 
-        # 2. Solo las reservas pendientes o confirmadas pueden
+        # Solo las reservas pendientes o confirmadas pueden
         # comprometer equipamiento.
         if (
             reserva.estado_reserva is None
@@ -385,8 +586,7 @@ def solicitar_equipamiento_reserva(
                 "reservas pendientes o confirmadas."
             )
 
-        # 3. Bloqueamos el equipamiento para evitar que dos
-        # operaciones comprometan simultáneamente las mismas unidades.
+        # Bloqueamos el equipamiento.
         try:
             equipamiento = Equipamiento.objects.select_for_update().get(
                 pk=equipamiento_id
@@ -396,15 +596,39 @@ def solicitar_equipamiento_reserva(
                 "El equipamiento indicado no existe."
             )
 
-        # 4. Buscamos si ya existe una solicitud de este equipo
-        # para esta reserva.
+        if equipamiento.estado != Equipamiento.Estado.DISPONIBLE:
+            raise ValidationError(
+                "El equipamiento seleccionado no está disponible."
+            )
+
+        # Si el equipamiento es fijo, asociamos su aula
+        # automáticamente cuando todavía no pertenece a la reserva.
+        if not equipamiento.trasladable:
+
+            if equipamiento.aula_id is None:
+                raise ValidationError(
+                    "El equipamiento fijo no tiene un aula asignada."
+                )
+
+            aula_ya_asociada = reserva.aulas.filter(
+                pk=equipamiento.aula_id
+            ).exists()
+
+            if not aula_ya_asociada:
+                asignar_aulas_reserva(
+                    reserva_id=reserva.pk,
+                    aulas_ids=[equipamiento.aula_id],
+                )
+
+        # Buscamos si ya existe una solicitud de este equipo.
+        # Puede ser una solicitud automática creada al asociar el aula.
         solicitud = SolicitudEquipo.objects.filter(
             reserva=reserva,
             equipamiento=equipamiento,
         ).first()
 
-        # 5. Consultamos la disponibilidad excluyendo la propia
-        # reserva, para que su solicitud anterior no se cuente dos veces.
+        # Consultamos la disponibilidad excluyendo la propia
+        # reserva, para no contar su solicitud anterior dos veces.
         aulas = list(reserva.aulas.all())
 
         equipamientos_disponibles = obtener_equipamiento_disponible(
@@ -424,19 +648,23 @@ def solicitar_equipamiento_reserva(
             None,
         )
 
-        if disponibilidad is None:
+        cantidad_disponible = (
+            disponibilidad["cantidad_disponible"]
+            if disponibilidad is not None
+            else 0
+        )
+
+        if cantidad_disponible <= 0:
             raise ValidationError(
-                "El equipamiento no está disponible para esta reserva."
+                "No hay unidades disponibles de este equipamiento."
             )
 
-        # 6. Comprobamos que alcance el stock.
-        if cantidad_solicitada > disponibilidad["cantidad_disponible"]:
-            raise ValidationError(
-                f"Stock insuficiente. Cantidad disponible: "
-                f"{disponibilidad['cantidad_disponible']}."
-            )
+        cantidad_reservada = min(
+            cantidad_solicitada,
+            cantidad_disponible,
+        )
 
-        # 7. Creamos o actualizamos la solicitud.
+        # Creamos o actualizamos la solicitud.
         if solicitud is None:
             solicitud = SolicitudEquipo(
                 reserva=reserva,
@@ -444,8 +672,11 @@ def solicitar_equipamiento_reserva(
             )
 
         solicitud.cantidad_solicitada = cantidad_solicitada
-        solicitud.cantidad_reservada = cantidad_solicitada
+        solicitud.cantidad_reservada = cantidad_reservada
         solicitud.cantidad_critica = cantidad_critica
+
+        # Al solicitarlo expresamente, deja de ser automática.
+        solicitud.asignacion_automatica = False
 
         # Ejecutamos las validaciones definidas en el modelo.
         solicitud.full_clean()
@@ -453,6 +684,192 @@ def solicitar_equipamiento_reserva(
         solicitud.save()
 
     return solicitud
+
+
+def actualizar_solicitud_equipamiento(
+    solicitud_id,
+    equipamiento_id,
+    cantidad_solicitada,
+    cantidad_critica,
+):
+    """
+    Actualiza una solicitud de equipamiento existente.
+
+    Permite cambiar el equipamiento y las cantidades,
+    manteniendo la reserva original.
+
+    Si existe una solicitud automática para el nuevo equipamiento,
+    la convierte en manual y elimina la solicitud anterior.
+    """
+
+    with transaction.atomic():
+
+        # Bloqueamos la solicitud existente.
+        try:
+            solicitud_actual = (
+                SolicitudEquipo.objects
+                .select_for_update()
+                .get(pk=solicitud_id)
+            )
+        except SolicitudEquipo.DoesNotExist:
+            raise ValidationError(
+                "La solicitud de equipamiento no existe."
+            )
+
+        # No permitimos modificar solicitudes automáticas.
+        if solicitud_actual.asignacion_automatica:
+            raise ValidationError(
+                "No se pueden modificar solicitudes de equipamiento "
+                "asignadas automáticamente."
+            )
+
+        # Bloqueamos la reserva original.
+        try:
+            reserva = (
+                Reserva.objects
+                .select_for_update(of=("self",))
+                .select_related("estado_reserva")
+                .get(pk=solicitud_actual.reserva_id)
+            )
+        except Reserva.DoesNotExist:
+            raise ValidationError(
+                "La reserva asociada no existe."
+            )
+
+        # Verificamos que la reserva permita solicitar equipamiento.
+        if (
+            reserva.estado_reserva is None
+            or reserva.estado_reserva.estado not in ESTADOS_QUE_BLOQUEAN
+        ):
+            raise ValidationError(
+                "Solo se puede modificar equipamiento de reservas "
+                "pendientes o confirmadas."
+            )
+
+        # Bloqueamos el nuevo equipamiento.
+        try:
+            equipamiento = (
+                Equipamiento.objects
+                .select_for_update()
+                .get(pk=equipamiento_id)
+            )
+        except Equipamiento.DoesNotExist:
+            raise ValidationError(
+                "El equipamiento indicado no existe."
+            )
+
+        # Verificamos que el equipamiento esté disponible.
+        if equipamiento.estado != Equipamiento.Estado.DISPONIBLE:
+            raise ValidationError(
+                "El equipamiento seleccionado no está disponible."
+            )
+
+        # Si es fijo, su aula debe estar asociada a la reserva.
+        if not equipamiento.trasladable:
+
+            if equipamiento.aula_id is None:
+                raise ValidationError(
+                    "El equipamiento fijo no tiene un aula asignada."
+                )
+
+            if not reserva.aulas.filter(
+                pk=equipamiento.aula_id
+            ).exists():
+                raise ValidationError(
+                    "El aula del equipamiento fijo debe estar "
+                    "asociada previamente a la reserva."
+                )
+
+        # Validamos que no exista otra solicitud manual
+        # para el mismo equipamiento y reserva.
+        otra_solicitud = (
+            SolicitudEquipo.objects
+            .select_for_update()
+            .filter(
+                reserva=reserva,
+                equipamiento=equipamiento,
+            )
+            .exclude(pk=solicitud_actual.pk)
+            .first()
+        )
+
+        if (
+            otra_solicitud is not None
+            and not otra_solicitud.asignacion_automatica
+        ):
+            raise ValidationError(
+                "Ya existe una solicitud manual para ese equipamiento "
+                "en esta reserva."
+            )
+
+        # Consultamos la disponibilidad excluyendo la reserva actual.
+        aulas = list(reserva.aulas.all())
+
+        equipamientos_disponibles = obtener_equipamiento_disponible(
+            fecha=reserva.fecha_reserva,
+            hora_inicio=reserva.horario_inicio,
+            hora_fin=reserva.horario_fin,
+            aulas=aulas,
+            excluir_reserva_id=reserva.pk,
+        )
+
+        disponibilidad = next(
+            (
+                item
+                for item in equipamientos_disponibles
+                if item["equipamiento"].pk == equipamiento.pk
+            ),
+            None,
+        )
+
+        cantidad_disponible = (
+            disponibilidad["cantidad_disponible"]
+            if disponibilidad is not None
+            else 0
+        )
+
+        if cantidad_disponible <= 0:
+            raise ValidationError(
+                "No hay unidades disponibles de este equipamiento."
+            )
+
+        cantidad_reservada = min(
+            cantidad_solicitada,
+            cantidad_disponible,
+        )
+
+        # Si existe una solicitud automática para el nuevo
+        # equipamiento, la reutilizamos y eliminamos la anterior.
+        if otra_solicitud is not None:
+
+            solicitud = otra_solicitud
+
+            solicitud.cantidad_solicitada = cantidad_solicitada
+            solicitud.cantidad_reservada = cantidad_reservada
+            solicitud.cantidad_critica = cantidad_critica
+            solicitud.asignacion_automatica = False
+
+            solicitud.full_clean()
+            solicitud.save()
+
+            solicitud_actual.delete()
+
+        else:
+
+            # Si no existe otra solicitud, actualizamos la actual.
+            solicitud = solicitud_actual
+
+            solicitud.equipamiento = equipamiento
+            solicitud.cantidad_solicitada = cantidad_solicitada
+            solicitud.cantidad_reservada = cantidad_reservada
+            solicitud.cantidad_critica = cantidad_critica
+            solicitud.asignacion_automatica = False
+
+            solicitud.full_clean()
+            solicitud.save()
+
+    return solicitud
+
 
 def eliminar_solicitud_equipamiento(
     reserva_id,
@@ -780,17 +1197,18 @@ def _obtener_fecha_hora_reserva(reserva, hora):
     return fecha_hora
 
 
-def _validar_recursos_reserva(reserva):
+def _validar_recursos_reserva(reserva, exigir_aulas=True):
     """Comprueba que las aulas y el equipamiento sigan disponibles."""
 
-    # Comprobamos que haya al menos un aula asignada.
+    # Comprobamos que haya al menos un aula asignada,
+    #si la operación lo requiere.
     aulas_ids = list(
         ReservaAula.objects.filter(
             reserva=reserva
         ).values_list("aula_id", flat=True)
     )
 
-    if not aulas_ids:
+    if not aulas_ids and exigir_aulas:
         raise ValidationError(
             "No se puede confirmar una reserva sin aulas asignadas."
         )
@@ -860,14 +1278,21 @@ def _validar_recursos_reserva(reserva):
             "Uno o más equipos solicitados ya no existen."
         )
 
+    equipos_expresos_ids = {
+        solicitud.equipamiento_id
+        for solicitud in solicitudes
+        if not solicitud.asignacion_automatica
+    }
+
     if any(
         equipo.estado != Equipamiento.Estado.DISPONIBLE
         for equipo in equipos
+        if equipo.pk in equipos_expresos_ids
     ):
         raise ValidationError(
-            "Uno o más equipos solicitados ya no están disponibles."
+            "Uno o más equipos solicitados expresamente "
+            "ya no están disponibles."
         )
-
     # Calculamos la disponibilidad excluyendo esta reserva,
     # porque sus solicitudes ya están comprometidas.
     disponibilidad = obtener_equipamiento_disponible(
@@ -885,6 +1310,14 @@ def _validar_recursos_reserva(reserva):
 
     for solicitud in solicitudes:
         equipo = equipos_por_id[solicitud.equipamiento_id]
+
+        # Si es una asignación automática y el equipo dejó de estar
+        # disponible, no debe impedir la confirmación de la reserva.
+        if (
+            solicitud.asignacion_automatica
+            and equipo.estado != Equipamiento.Estado.DISPONIBLE
+        ):
+            continue
 
         cantidad = (
             solicitud.cantidad_reservada
@@ -1039,9 +1472,11 @@ def finalizar_reservas_vencidas():
     Cancela reservas pendientes que llegaron a su horario de inicio
     y finaliza reservas confirmadas cuyo horario de fin ya pasó.
 
-    Devuelve la cantidad de reservas finalizadas.
+    Devuelve un diccionario con la cantidad de reservas canceladas
+    y finalizadas.
     """
     ahora = timezone.now()
+    reservas_canceladas = 0
     reservas_finalizadas = 0
 
     reservas = Reserva.objects.filter(
@@ -1076,6 +1511,7 @@ def finalizar_reservas_vencidas():
                         EstadoReserva.Estados.CANCELADA
                     )
                     reserva.save(update_fields=["estado_reserva"])
+                    reservas_canceladas += 1
 
             elif estado_actual == EstadoReserva.Estados.CONFIRMADA:
                 momento_limite = _obtener_fecha_hora_reserva(
@@ -1090,4 +1526,14 @@ def finalizar_reservas_vencidas():
                     reserva.save(update_fields=["estado_reserva"])
                     reservas_finalizadas += 1
 
-    return reservas_finalizadas
+    return {
+        "canceladas": reservas_canceladas,
+        "finalizadas": reservas_finalizadas,
+    }
+
+
+def actualizar_estados_reservas():
+    """
+    Actualiza los estados de las reservas vencidas.
+    """
+    return finalizar_reservas_vencidas()

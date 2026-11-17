@@ -2,6 +2,8 @@ from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from usuarios.permissions import EsEquipoDelCentro
+
 from . import alerts, historical, indicators
 from .models import HistorialReserva
 from .queries import cargar_reservas
@@ -9,6 +11,7 @@ from .serializers import ConsultaReporteSerializer, HistorialReservaSerializer
 
 
 class ConsultaMixin:
+    permission_classes = [EsEquipoDelCentro]
     alertas_por_defecto = False
 
     def filtros(self):

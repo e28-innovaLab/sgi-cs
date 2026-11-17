@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Rol, Usuario
-from .permissions import SoloAdministrador, SoloAdministradorParaEscritura
+from .permissions import SoloAdministrador
 from .serializers import LoginSerializer, PerfilSerializer, RolSerializer, UsuarioSerializer
 
 
@@ -49,5 +49,5 @@ class UsuarioViewSet(
 ):
     queryset = Usuario.objects.select_related('rol').order_by('id_usuario')
     serializer_class = UsuarioSerializer
-    permission_classes = [SoloAdministradorParaEscritura]
+    permission_classes = [SoloAdministrador]
     search_fields = ['username', 'first_name', 'last_name', 'email', 'numero_documento']

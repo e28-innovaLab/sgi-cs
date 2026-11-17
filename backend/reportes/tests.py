@@ -108,7 +108,7 @@ class ReportesTests(APITestCase):
         extra = Equipamiento.objects.create(nombre='Proyector', categoria=self.equipo.categoria, trasladable=True)
         self.solicitar(reserva, cantidad=1, reservada=1, equipo=extra)
         persona = Participante.objects.create(
-            nombres='Ana', apellidos='Prueba', tipo_documento='DNI', numero_documento='9999',
+            creado_por=self.usuario, nombres='Ana', apellidos='Prueba', tipo_documento='DNI', numero_documento='9999',
             fecha_nacimiento='2000-01-01', nacionalidad='Argentina', lugar_residencia='CABA',
             mail='ana@example.com', celular='1100000000',
         )
@@ -233,7 +233,7 @@ class ReportesTests(APITestCase):
         ultimo = HistorialReserva.objects.filter(reserva_original_id=reserva.pk).first()
         self.assertEqual(ultimo.datos['aulas'][0]['pk'], self.aula.pk)
         persona = Participante.objects.create(
-            nombres='Ana', apellidos='Prueba', tipo_documento='DNI', numero_documento='9999',
+            creado_por=self.usuario, nombres='Ana', apellidos='Prueba', tipo_documento='DNI', numero_documento='9999',
             fecha_nacimiento='2000-01-01', nacionalidad='Argentina', lugar_residencia='CABA',
             mail='ana@example.com', celular='1100000000',
         )
@@ -249,6 +249,19 @@ class ReportesTests(APITestCase):
         ultimo = HistorialReserva.objects.filter(reserva_original_id=reserva.pk).first()
         self.assertEqual([a['pk'] for a in ultimo.datos['aulas']], [self.otra.pk])
         self.assertFalse(registrar_reserva(reserva.pk))
+
+    def test_historial_conserva_los_equipos_fijos_asociados_automaticamente(self):
+        reserva = self.reserva(aulas=[])
+        fijo = Equipamiento.objects.create(
+            nombre='Simulador fijo', cantidad=3, trasladable=False,
+            aula=self.aula, categoria=self.equipo.categoria,
+        )
+        asignar_aulas_reserva(reserva.pk, [self.aula.pk])
+        self.assertTrue(SolicitudEquipo.objects.get(reserva=reserva, equipamiento=fijo).asignacion_automatica)
+        ultimo = HistorialReserva.objects.filter(reserva_original_id=reserva.pk).first()
+        self.assertEqual([a['pk'] for a in ultimo.datos['aulas']], [self.aula.pk])
+        self.assertEqual(ultimo.datos['equipos'][0]['equipamiento_id'], fijo.pk)
+        self.assertEqual(ultimo.datos['equipos'][0]['cantidad_reservada'], 3)
 
     def test_historial_y_consolidado_sobreviven_borrado_sin_contar_cada_version(self):
         reserva = self.reserva(estado='Finalizada', aulas=[self.aula, self.otra])

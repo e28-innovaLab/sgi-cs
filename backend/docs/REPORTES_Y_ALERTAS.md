@@ -5,6 +5,9 @@ Coordinación y superusuarios activos. Usa la autenticación existente:
 `Authorization: Token <token>`. Sin token responde 401; sin rol habilitado, 403;
 filtros inválidos, 400. POST, PUT, PATCH y DELETE no están habilitados.
 
+Estos endpoints declaran su permiso de equipo del centro explícitamente; los
+cambios en el permiso global de la API no amplían el acceso a los reportes.
+
 ## Instalación y consolidación inicial
 
 Desde `backend`, con PostgreSQL configurado en `.env`:
@@ -104,6 +107,9 @@ no incluye actividades sin reserva. `reservas_activas` suma pendientes y confirm
   no el estado histórico del aula.
 - **Demanda de equipos:** suma de `cantidad_solicitada` de pendientes, confirmadas
   y finalizadas. Canceladas y rechazadas se excluyen.
+- Las solicitudes automáticas de equipos fijos al asignar aulas también forman
+  parte de estas métricas: se cuentan solicitudes registradas, no solo pedidos
+  manuales. La captura de historial se realiza después de completar esa asignación.
 - **Unidades-minuto:** suma de cantidad efectivamente reservada × duración de
   confirmadas/finalizadas. Una cantidad reservada nula aporta cero; no se inventa
   una asignación a partir de lo solicitado. El stock y estado mostrados son actuales.
@@ -194,5 +200,6 @@ ocupación, conflictos reales y consecutivos, faltantes, resolución de alertas,
 captura transaccional, borrado, consolidación idempotente y consultas de indicadores
 sin una consulta adicional por cada reserva.
 
-Verificado localmente: 72 pruebas aprobadas tanto con PostgreSQL como con SQLite;
-controles de Django correctos y modelos alineados con las migraciones.
+Integración verificada el 17/11/2026: suite completa de 155 pruebas aprobada tanto
+con PostgreSQL como con SQLite; controles de Django correctos y modelos alineados
+con las migraciones.

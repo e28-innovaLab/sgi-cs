@@ -33,7 +33,8 @@ class MigracionParticipantesTests(TransactionTestCase):
         Actividad = self.apps_anteriores.get_model('reservas', 'Actividad')
         Reserva = self.apps_anteriores.get_model('reservas', 'Reserva')
         Participante = self.apps_anteriores.get_model('reservas', 'Participante')
-        rol, _ = Rol.objects.get_or_create(nombre='COORDINACION')
+        # Las migraciones posteriores asignan un creador ADMIN a participantes anteriores.
+        rol, _ = Rol.objects.get_or_create(nombre='ADMIN')
         usuario = Usuario.objects.create(
             username='responsable', rol=rol, numero_documento='900',
         )
