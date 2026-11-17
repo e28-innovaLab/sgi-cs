@@ -113,9 +113,7 @@ class Equipamiento(models.Model):
     estado = models.CharField(
         max_length=20,
         choices=Estado.choices,
-        default=Estado.DISPONIBLE,
-        null=True,
-        blank=True,
+        default=Estado.DISPONIBLE
     )
 
     trasladable = models.BooleanField(default=False)
