@@ -29,7 +29,7 @@ class LoginSerializer(serializers.Serializer):
         usuario = authenticate(request=self.context['request'], **attrs)
         if usuario is None:
             raise serializers.ValidationError('Usuario o contraseña incorrectos.')
-        if not usuario.is_superuser and usuario.rol.nombre not in (Rol.ADMIN, Rol.COORDINACION):
+        if not usuario.is_superuser and usuario.rol.nombre not in (Rol.ADMIN, Rol.COORDINACION, Rol.SOLICITANTE):
             raise serializers.ValidationError('El usuario no tiene un rol habilitado.')
         return {'usuario': usuario}
 
@@ -38,7 +38,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, trim_whitespace=False)
     is_active = serializers.BooleanField(required=False, default=True)
     rol = serializers.PrimaryKeyRelatedField(
-        queryset=Rol.objects.filter(nombre__in=[Rol.ADMIN, Rol.COORDINACION]),
+        queryset=Rol.objects.all(),
     )
 
     class Meta:

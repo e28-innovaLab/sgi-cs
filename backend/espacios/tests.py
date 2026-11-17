@@ -84,19 +84,27 @@ class CatalogosAPITests(APITestCase):
                 self.assertEqual(self.client.put(f'/api/{ruta}/{pk}/', {}).status_code, 403)
                 self.assertEqual(self.client.delete(f'/api/{ruta}/{pk}/').status_code, 403)
 
-    def test_coordinacion_actualiza_solo_estado(self):
+
+
+    def test_coordinacion_no_puede_actualizar_estado(self):
         self.client.force_authenticate(self.coordinacion)
+
         for ruta, objeto in [('aulas', self.aula), ('equipamientos', self.equipo)]:
             with self.subTest(ruta=ruta):
                 url = f'/api/{ruta}/{objeto.pk}/estado/'
-                self.assertEqual(self.client.patch(url, {'estado': 'MANTENIMIENTO'}).status_code, 200)
+                estado_original = objeto.estado
+
+                response = self.client.patch(
+                    url,
+                    {'estado': 'MANTENIMIENTO'},
+                    format='json',
+                )
+
+                self.assertEqual(response.status_code, 403)
+
                 objeto.refresh_from_db()
-                self.assertEqual(objeto.estado, 'MANTENIMIENTO')
-                self.assertEqual(self.client.patch(url, {}).status_code, 400)
-                self.assertEqual(self.client.patch(url, {'estado': 'ROTO'}).status_code, 400)
-                self.assertEqual(self.client.patch(url, {'estado': 'DISPONIBLE', 'nombre': 'Cambio'}).status_code, 400)
-                objeto.refresh_from_db()
-                self.assertEqual(objeto.estado, 'MANTENIMIENTO')
+                self.assertEqual(objeto.estado, estado_original)
+
 
     def test_no_se_eliminan_categorias_en_uso_ni_aulas_con_equipo(self):
         self.assertEqual(self.client.delete(f'/api/categorias/{self.categoria.pk}/').status_code, 409)

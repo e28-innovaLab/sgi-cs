@@ -112,8 +112,8 @@ class ReservaAdmin(admin.ModelAdmin):
 
 @admin.register(ReservaAula)
 class ReservaAulaAdmin(admin.ModelAdmin):
-    list_display = ("id_reserva_por_aula", "reserva", "aula", "estado_reserva")
-    list_filter = ("estado_reserva",)
+    list_display = ("id_reserva_por_aula", "reserva", "aula")
+    list_filter = ("reserva", "aula")
 
     def has_add_permission(self, request):
         return False
@@ -134,10 +134,7 @@ class SolicitudEquipoAdmin(admin.ModelAdmin):
         "cantidad_solicitada",
         "cantidad_reservada",
         "cantidad_critica",
-        "estado_reserva",
     )
-
-    list_filter = ("estado_reserva",)
 
     search_fields = (
         "reserva__actividad__nombre",
@@ -151,7 +148,6 @@ class SolicitudEquipoAdmin(admin.ModelAdmin):
         "cantidad_solicitada",
         "cantidad_reservada",
         "cantidad_critica",
-        "estado_reserva",
     )
 
     def has_add_permission(self, request):

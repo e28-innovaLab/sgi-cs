@@ -12,6 +12,8 @@ class RolAdmin(admin.ModelAdmin):
 
 @admin.register(Usuario)
 class UsuarioAdmin(UserAdmin):
+    readonly_fields = ("last_login", "date_joined")
+    
     fieldsets = UserAdmin.fieldsets + (
         ('Centro de simulación', {'fields': ('rol', 'tipo_documento', 'numero_documento')}),
     )

@@ -36,7 +36,7 @@ class PerfilView(APIView):
 
 
 class RolViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Rol.objects.filter(nombre__in=[Rol.ADMIN, Rol.COORDINACION]).order_by('id_rol')
+    queryset = Rol.objects.all().order_by('id_rol')
     serializer_class = RolSerializer
 
 

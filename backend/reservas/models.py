@@ -121,13 +121,19 @@ class Actividad(models.Model):
 
     def clean(self):
         super().clean()
+        # No permitir actividades los sábados ni domingos.
+        if self.fecha_estimada and self.fecha_estimada.weekday() >= 5:
+            raise ValidationError({
+                "fecha_estimada": (
+                    "No se pueden programar actividades los sábados ni domingos."
+                )
+            })
+
         if (
             self.horario_inicio_estimado is not None
             and self.horario_fin_estimado is not None
             and self.horario_inicio_estimado >= self.horario_fin_estimado
         ):
-            from django.core.exceptions import ValidationError
-
             raise ValidationError({
                 "horario_fin_estimado":
                     "La hora de fin debe ser posterior a la hora de inicio."
@@ -209,6 +215,13 @@ class Reserva(models.Model):
 
     def clean(self):
         super().clean()
+        # No permitir reservas los sábados ni domingos.
+        if self.fecha_reserva and self.fecha_reserva.weekday() >= 5:
+            raise ValidationError({
+                "fecha_reserva": (
+                "No se pueden realizar reservas los sábados ni domingos."
+                )
+            })
 
         # Validar que el horario de finalización sea posterior al inicio.
         if (
@@ -359,12 +372,6 @@ class ReservaAula(models.Model):
         db_column="idAula",
     )
 
-    estado_reserva = models.BooleanField(
-        null=True,
-        blank=True,
-        db_column="estadoReserva",
-    )
-
     class Meta:
         db_table = "reservaPorAula"
         constraints = [
@@ -413,10 +420,9 @@ class SolicitudEquipo(models.Model):
         db_column="cantidadCritica",
     )
 
-    estado_reserva = models.BooleanField(
-        null=True,
-        blank=True,
-        db_column="estadoReserva",
+    asignacion_automatica = models.BooleanField(
+        default=False,
+        db_column="asignacionAutomatica",
     )
 
     class Meta:
@@ -485,6 +491,13 @@ class Participante(models.Model):
     id_participante = models.AutoField(
         primary_key=True,
         db_column="idParticipante",
+    )
+
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="participantes_creados",
+        db_column="idUsuarioCreador",
     )
 
     nombres = models.CharField(max_length=100)

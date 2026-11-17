@@ -5,6 +5,7 @@ from django.db import models
 class Rol(models.Model):
     ADMIN = 'ADMIN'
     COORDINACION = 'COORDINACION'
+    SOLICITANTE = 'SOLICITANTE'
 
     id_rol = models.AutoField(
         primary_key=True,
@@ -29,7 +30,7 @@ class Rol(models.Model):
 class UsuarioManager(UserManager):
     def create_superuser(self, username, email=None, password=None, **extra_fields):
         rol_admin, _ = Rol.objects.get_or_create(nombre=Rol.ADMIN)
-        extra_fields.setdefault("rol", rol_admin)
+        extra_fields["rol"] = rol_admin
 
         return super().create_superuser(
             username=username,

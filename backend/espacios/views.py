@@ -49,9 +49,17 @@ class AulaViewSet(EstadoMixin, CatalogoViewSet):
             datos['capacidad__gte'] = datos.pop('capacidad_min')
         return super().get_queryset().filter(**datos)
 
+
     def perform_destroy(self, instance):
-        if instance.equipamientos.exists():
-            raise ConflictoDeRelacion('Reasigná el equipamiento del aula antes de eliminarla.')
+        equipamientos_fijos = instance.equipamientos.filter(
+            trasladable=False
+        )
+
+        if equipamientos_fijos.exists():
+            raise ConflictoDeRelacion(
+                'No se puede eliminar el aula porque tiene equipamientos fijos asociados.'
+            )
+
         super().perform_destroy(instance)
 
     @action(detail=True, methods=['get'])

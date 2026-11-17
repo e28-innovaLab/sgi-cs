@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from reservas.services import finalizar_reservas_vencidas
+from reservas.services import actualizar_estados_reservas
 
 
 class Command(BaseCommand):
@@ -10,11 +10,12 @@ class Command(BaseCommand):
     )
 
     def handle(self, *args, **options):
-        cantidad = finalizar_reservas_vencidas()
+        resultado = actualizar_estados_reservas()
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Proceso completado. "
-                f"Reservas finalizadas: {cantidad}."
+                "Proceso completado. "
+                f"Reservas canceladas: {resultado['canceladas']}. "
+                f"Reservas finalizadas: {resultado['finalizadas']}."
             )
         )

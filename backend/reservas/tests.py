@@ -8,6 +8,8 @@ from usuarios.models import Rol, Usuario
 from .models import Actividad, EstadoReserva, Reserva, ReservaAula, SolicitudEquipo
 from .services import (
     obtener_aulas_disponibles,
+    solicitar_equipamiento_reserva,
+    actualizar_solicitud_equipamiento,
     confirmar_reserva,
     rechazar_reserva,
     cancelar_reserva,
@@ -57,6 +59,19 @@ class DisponibilidadAPITests(APITestCase):
             'fecha': self.fecha.isoformat(), 'hora_inicio': '10:00', 'hora_fin': '12:00', **cambios,
         })
 
+    def crear_equipamiento(self, nombre="Proyector", cantidad=5):
+        categoria = Categoria.objects.create(
+            nombre=f"Categoría {nombre}"
+        )
+
+        return Equipamiento.objects.create(
+            nombre=nombre,
+            categoria=categoria,
+            cantidad=cantidad,
+            estado=Equipamiento.Estado.DISPONIBLE,
+            trasladable=True,
+        )
+
     def test_pendientes_y_confirmadas_bloquean_superposiciones(self):
         reserva = self.reservar()
         for estado in ['Pendiente', 'Confirmada']:
@@ -77,7 +92,7 @@ class DisponibilidadAPITests(APITestCase):
     def test_canceladas_rechazadas_y_otras_fechas_no_bloquean(self):
         self.reservar(estado='Cancelada')
         self.reservar(estado='Rechazada')
-        self.reservar(fecha=date(2027, 1, 16))
+        self.reservar(fecha=date(2027, 1, 18))
         self.assertEqual(len(self.disponibles().data), 2)
 
     def test_aulas_no_operativas_no_aparecen(self):
@@ -210,7 +225,12 @@ class DisponibilidadAPITests(APITestCase):
         for estado in estados_terminales:
             reservas.append(self.reservar(estado=estado))
 
-        finalizar_reservas_vencidas()
+        resultado = finalizar_reservas_vencidas()
+
+        self.assertEqual(resultado, {
+            'canceladas': 0,
+            'finalizadas': 0,
+        })
 
         for reserva in reservas:
             reserva.refresh_from_db()
@@ -219,3 +239,159 @@ class DisponibilidadAPITests(APITestCase):
                 reserva.estado_reserva.estado,
                 estados_terminales,
             )
+
+
+    def test_solicitar_equipamiento_reserva_toda_la_cantidad_disponible(self):
+        reserva = self.reservar()
+        equipo = self.crear_equipamiento(
+            nombre="Proyector",
+            cantidad=5,
+        )
+
+        solicitud = solicitar_equipamiento_reserva(
+            reserva_id=reserva.pk,
+            equipamiento_id=equipo.pk,
+            cantidad_solicitada=5,
+            cantidad_critica=2,
+        )
+
+        self.assertEqual(solicitud.cantidad_solicitada, 5)
+        self.assertEqual(solicitud.cantidad_reservada, 5)
+        self.assertEqual(solicitud.cantidad_critica, 2)
+        self.assertFalse(solicitud.asignacion_automatica)
+
+
+    def test_solicitar_equipamiento_permite_asignacion_parcial(self):
+        # Creamos dos reservas que se superponen.
+        reserva_existente = self.reservar()
+        reserva_nueva = self.reservar()
+
+        equipo = self.crear_equipamiento(
+            nombre="Proyector",
+            cantidad=5,
+        )
+
+        # La primera reserva ya tiene comprometidas 3 unidades.
+        SolicitudEquipo.objects.create(
+            reserva=reserva_existente,
+            equipamiento=equipo,
+            cantidad_solicitada=3,
+            cantidad_reservada=3,
+            cantidad_critica=1,
+        )
+
+        # La segunda reserva solicita 4 unidades.
+        solicitud = solicitar_equipamiento_reserva(
+            reserva_id=reserva_nueva.pk,
+            equipamiento_id=equipo.pk,
+            cantidad_solicitada=4,
+            cantidad_critica=2,
+        )
+
+        # Solo quedan 2 unidades disponibles.
+        self.assertEqual(solicitud.cantidad_solicitada, 4)
+        self.assertEqual(solicitud.cantidad_reservada, 2)
+        self.assertEqual(solicitud.cantidad_critica, 2)
+
+
+    def test_solicitar_equipamiento_rechaza_solicitud_sin_stock(self):
+        reserva_existente = self.reservar()
+        reserva_nueva = self.reservar()
+
+        equipo = self.crear_equipamiento(
+            nombre="Proyector",
+            cantidad=5,
+        )
+
+        # La primera reserva consume todo el stock.
+        SolicitudEquipo.objects.create(
+            reserva=reserva_existente,
+            equipamiento=equipo,
+            cantidad_solicitada=5,
+            cantidad_reservada=5,
+            cantidad_critica=2,
+        )
+
+        # La segunda reserva no puede obtener unidades.
+        with self.assertRaisesMessage(
+            ValidationError,
+            "No hay unidades disponibles de este equipamiento.",
+        ):
+            solicitar_equipamiento_reserva(
+                reserva_id=reserva_nueva.pk,
+                equipamiento_id=equipo.pk,
+                cantidad_solicitada=2,
+                cantidad_critica=1,
+            )
+
+        # Comprobamos que no se haya creado una solicitud.
+        self.assertFalse(
+            SolicitudEquipo.objects.filter(
+                reserva=reserva_nueva,
+                equipamiento=equipo,
+            ).exists()
+        )
+
+
+    def test_actualizar_solicitud_sin_stock_conserva_solicitud_original(self):
+        reserva_existente = self.reservar()
+        reserva_actual = self.reservar()
+
+        equipo_original = self.crear_equipamiento(
+            nombre="Proyector original",
+            cantidad=3,
+        )
+
+        equipo_nuevo = self.crear_equipamiento(
+            nombre="Proyector nuevo",
+            cantidad=5,
+        )
+
+        # Creamos una solicitud manual para la reserva actual.
+        solicitud_original = SolicitudEquipo.objects.create(
+            reserva=reserva_actual,
+            equipamiento=equipo_original,
+            cantidad_solicitada=2,
+            cantidad_reservada=2,
+            cantidad_critica=1,
+            asignacion_automatica=False,
+        )
+
+        # Otra reserva consume todo el stock del nuevo equipo.
+        SolicitudEquipo.objects.create(
+            reserva=reserva_existente,
+            equipamiento=equipo_nuevo,
+            cantidad_solicitada=5,
+            cantidad_reservada=5,
+            cantidad_critica=2,
+        )
+
+        # Intentamos cambiar al equipo sin stock.
+        with self.assertRaisesMessage(
+            ValidationError,
+            "No hay unidades disponibles de este equipamiento.",
+        ):
+            actualizar_solicitud_equipamiento(
+                solicitud_id=solicitud_original.pk,
+                equipamiento_id=equipo_nuevo.pk,
+                cantidad_solicitada=3,
+                cantidad_critica=2,
+            )
+
+        # Recuperamos la solicitud original desde la base de datos.
+        solicitud_original.refresh_from_db()
+
+        # Comprobamos que no haya sufrido modificaciones.
+        self.assertEqual(
+            solicitud_original.equipamiento_id,
+            equipo_original.pk,
+        )
+        self.assertEqual(solicitud_original.cantidad_solicitada, 2)
+        self.assertEqual(solicitud_original.cantidad_reservada, 2)
+        self.assertEqual(solicitud_original.cantidad_critica, 1)
+
+        self.assertTrue(
+            SolicitudEquipo.objects.filter(
+                pk=solicitud_original.pk
+            ).exists()
+        )
