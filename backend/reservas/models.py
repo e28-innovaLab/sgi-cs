@@ -372,12 +372,6 @@ class ReservaAula(models.Model):
         db_column="idAula",
     )
 
-    estado_reserva = models.BooleanField(
-        null=True,
-        blank=True,
-        db_column="estadoReserva",
-    )
-
     class Meta:
         db_table = "reservaPorAula"
         constraints = [
@@ -426,10 +420,9 @@ class SolicitudEquipo(models.Model):
         db_column="cantidadCritica",
     )
 
-    estado_reserva = models.BooleanField(
-        null=True,
-        blank=True,
-        db_column="estadoReserva",
+    asignacion_automatica = models.BooleanField(
+        default=False,
+        db_column="asignacionAutomatica",
     )
 
     class Meta:
@@ -498,6 +491,13 @@ class Participante(models.Model):
     id_participante = models.AutoField(
         primary_key=True,
         db_column="idParticipante",
+    )
+
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="participantes_creados",
+        db_column="idUsuarioCreador",
     )
 
     nombres = models.CharField(max_length=100)
