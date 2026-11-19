@@ -108,6 +108,7 @@ function App() {
         <div className="menu-label">MENÚ PRINCIPAL</div>
 
         <nav className="menu">
+
           <a
             className={`menu-item ${seccionActiva === 'inicio' ? 'active' : ''}`}
             href="/"
@@ -118,7 +119,17 @@ function App() {
           >
             ▦ <span>Inicio</span>
           </a>
-
+         
+          <a
+            className={`menu-item ${seccionActiva === 'dashboard' ? 'active' : ''}`}
+            href="/dashboard"
+            onClick={event => {
+              event.preventDefault()
+              irASeccion('dashboard')
+            }}
+          >
+            ▥ <span>Dashboard</span>
+          </a>
           <a
             className={`menu-item ${seccionActiva === 'reservas' ? 'active' : ''}`}
             href="/reservas"
@@ -314,7 +325,28 @@ function App() {
             </section>
           </>
         )}
+        {seccionActiva === 'dashboard' && (
+          <section className="panel dashboard-embed-panel">
+            <div className="panel-heading">
+              <div>
+                <h3>Panel de control</h3>
+                <p>Estadísticas de reservas, actividades y equipamiento.</p>
+              </div>
+            </div>
 
+            <div className="dashboard-embed">
+              <iframe
+                title="Dashboard de estadísticas SIGES"
+                src="https://datastudio.google.com/embed/reporting/fc6b3b9d-4999-4e4a-8756-b8f6b9571cd5/page/UEJBG"
+                width="100%"
+                height="1100"
+                style={{ border: 0, width: '100%', minHeight: '80vh' }}
+                allowFullScreen
+                sandbox="allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+              />
+            </div>
+          </section>
+        )}
         {seccionActiva === 'reservas' && (
           <>
             <section className="panel form-panel">
@@ -485,7 +517,7 @@ function App() {
         )}
 
         {seccionActiva === 'espacios' && (
-          <section className="panel">
+          <section className="panel" id="espacios">
             <div className="panel-heading">
               <div>
                 <h3>Espacios registrados</h3>
@@ -528,7 +560,7 @@ function App() {
         )}
 
         {seccionActiva === 'recursos' && (
-          <section className="panel">
+          <section className="panel" id="recursos">
             <div className="panel-heading">
               <div>
                 <h3>Recursos y equipos</h3>
@@ -562,7 +594,7 @@ function App() {
         )}
 
         {seccionActiva === 'calendario' && (
-          <section className="panel">
+          <section className="panel" id="espacios">
             <div className="panel-heading">
               <div>
                 <h3>Calendario de actividades</h3>

@@ -1,0 +1,80 @@
+import { createContext, useContext, useReducer, useState } from 'react';
+import { MOCK_PEDIDOS, MOCK_ACTIVIDADES, MOCK_ESPACIOS, MOCK_EQUIPOS, MOCK_USUARIOS } from '../data/mock.js';
+
+const StoreContext = createContext();
+
+const inicial = {
+  sesion: { usuario: 'Coordinador', rol: 'Coordinación' },
+  pedidos: MOCK_PEDIDOS,
+  actividades: MOCK_ACTIVIDADES,
+  espacios: MOCK_ESPACIOS,
+  equipos: MOCK_EQUIPOS,
+  usuarios: MOCK_USUARIOS,
+  modalSolicitud: false,
+  toast: null,
+};
+
+function reducer(state, action) {
+  switch (action.type) {
+    case 'login': return { ...state, sesion: action.sesion };
+    case 'logout': return { ...state, sesion: null };
+    case 'rol': return { ...state, sesion: { ...state.sesion, rol: action.rol } };
+    case 'modalSolicitud': return { ...state, modalSolicitud: action.open };
+    case 'toast': return { ...state, toast: action.toast };
+    case 'pedidoNuevo': return { ...state, pedidos: [action.pedido, ...state.pedidos] };
+    case 'reservar': {
+      const p = state.pedidos.find(x => x.id === action.pedidoId);
+      const sp = state.espacios.find(x => x.id === action.spId);
+      const nuevaAct = {
+        id: 'a' + Date.now(),
+        titulo: p.titulo,
+        sp: sp.id,
+        dia: p.dia,
+        ini: p.ini,
+        fin: p.fin,
+        insc: p.cupo,
+        tipo: p.tipo,
+        resp: p.resp,
+        codigo: 'SIGES-' + Math.floor(1000 + Math.random() * 9000),
+        personas: [],
+        reg: false,
+        cancelada: false,
+      };
+      return {
+        ...state,
+        pedidos: state.pedidos.map(x => x.id === action.pedidoId ? { ...x, estado: 'Confirmado' } : x),
+        actividades: [nuevaAct, ...state.actividades],
+      };
+    }
+    case 'deshacerReserva': {
+      const p = state.pedidos.find(x => x.id === action.pedidoId);
+      return {
+        ...state,
+        pedidos: state.pedidos.map(x => x.id === action.pedidoId ? { ...x, estado: 'Por asignar' } : x),
+        actividades: state.actividades.filter(a => a.titulo !== p?.titulo),
+      };
+    }
+    case 'actividad':
+      return {
+        ...state,
+        actividades: state.actividades.map(a => a.id === action.id ? { ...a, ...action.cambios } : a),
+      };
+    default: return state;
+  }
+}
+
+export function StoreProvider({ children }) {
+  const [state, dispatch] = useReducer(reducer, inicial);
+  const [toastTimer, setToastTimer] = useState(null);
+
+  const flash = (texto, accion) => {
+    if (toastTimer) clearTimeout(toastTimer);
+    dispatch({ type: 'toast', toast: { texto, accion } });
+    const t = setTimeout(() => dispatch({ type: 'toast', toast: null }), 5000);
+    setToastTimer(t);
+  };
+
+  return <StoreContext.Provider value={{ state, dispatch, flash }}>{children}</StoreContext.Provider>;
+}
+
+export const useStore = () => useContext(StoreContext);
