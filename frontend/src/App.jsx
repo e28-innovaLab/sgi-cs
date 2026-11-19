@@ -1,219 +1,91 @@
 
 import { useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import './App.css'
 import Login from './components/Login'
-
-const espacios = [
-  { nombre: 'Aula 01', tipo: 'Aula', capacidad: 30, estado: 'Disponible' },
-  { nombre: 'Laboratorio 02', tipo: 'Laboratorio', capacidad: 20, estado: 'Ocupado' },
-  { nombre: 'Sala de reuniones', tipo: 'Sala', capacidad: 12, estado: 'Disponible' },
-  { nombre: 'Auditorio principal', tipo: 'Auditorio', capacidad: 100, estado: 'Mantenimiento' },
-]
+import Pedidos from './pages/Pedidos.jsx';
+import { useStore } from './store.jsx'
+import { DIAS, AREAS } from './data/mocks.js'
 
 function App() {
+  const { state, dispatch } = useStore()
+  const navigate = useNavigate()
+  const location = useLocation()
+
   const [logueado, setLogueado] = useState(false)
-  const [seccionActiva, setSeccionActiva] = useState('inicio')
+  const [mensaje, setMensaje] = useState('')
 
-  const [recursos, setRecursos] = useState(() => {
-    const guardados = localStorage.getItem('siges-recursos')
+  const espacios = state.espacios
+  const equipos = state.equipos
+  const actividades = state.actividades
+  const pedidos = state.pedidos
 
-    if (guardados) return JSON.parse(guardados)
+  const seccionActiva =
+    location.pathname === '/'
+      ? 'inicio'
+      : location.pathname.replace('/', '')
 
-    return [
-      {
-        id: 1,
-        nombre: 'Proyector',
-        categoria: 'Equipo audiovisual',
-        cantidad: 4,
-        espacio: 'Auditorio principal',
-        estado: 'Disponible',
-      },
-      {
-        id: 2,
-        nombre: 'Computadoras',
-        categoria: 'Equipos informáticos',
-        cantidad: 20,
-        espacio: 'Laboratorio 02',
-        estado: 'Disponible',
-      },
-      {
-        id: 3,
-        nombre: 'Micrófonos',
-        categoria: 'Equipo de audio',
-        cantidad: 2,
-        espacio: 'Auditorio principal',
-        estado: 'Mantenimiento',
-      },
-    ]
-  })
-
-  const [recursoEditando, setRecursoEditando] = useState(null)
-
-  const [reservas, setReservas] = useState(() => {
-    const guardadas = localStorage.getItem('siges-reservas')
-    return guardadas ? JSON.parse(guardadas) : []
-  })
-
-  const [espacioReserva, setEspacioReserva] = useState(
-    espacios.find((espacio) => espacio.estado !== 'Mantenimiento')?.nombre ||
-    espacios[0].nombre
-  )
-
-  const [mensajeReserva, setMensajeReserva] = useState('')
-  const [tipoMensajeReserva, setTipoMensajeReserva] = useState('')
-
-  function guardarRecursos(nuevosRecursos) {
-    setRecursos(nuevosRecursos)
-    localStorage.setItem('siges-recursos', JSON.stringify(nuevosRecursos))
+  function irASeccion(seccion) {
+    navigate(seccion === 'inicio' ? '/' : `/${seccion}`)
   }
 
-  function guardarReservas(nuevasReservas) {
-    setReservas(nuevasReservas)
-    localStorage.setItem('siges-reservas', JSON.stringify(nuevasReservas))
-  }
-
-  function agregarReserva(event) {
+  function agregarPedido(event) {
     event.preventDefault()
 
     const formulario = new FormData(event.currentTarget)
 
-    const actividad = formulario.get('actividad').trim()
-    const fecha = formulario.get('fecha')
-    const horaInicio = formulario.get('horaInicio')
-    const horaFin = formulario.get('horaFin')
-    const espacio = formulario.get('espacio')
-    const participantes = Number(formulario.get('participantes'))
-    const recursosSeleccionados = formulario.getAll('recursos').map(Number)
+    const titulo = formulario.get('titulo').trim()
+    const dia = Number(formulario.get('dia'))
+    const ini = Number(formulario.get('ini'))
+    const fin = Number(formulario.get('fin'))
+    const cupo = Number(formulario.get('cupo'))
+    const sol = formulario.get('sol')
+    const resp = formulario.get('resp').trim()
+    const equipo = formulario.get('equipo')
+    const cantidadEquipo = Number(formulario.get('cantidadEquipo'))
 
-    if (horaFin <= horaInicio) {
-      setTipoMensajeReserva('error')
-      setMensajeReserva(
-        'La hora de finalización debe ser posterior a la hora de inicio.'
-      )
+    if (fin <= ini) {
+      setMensaje('La hora de finalización debe ser posterior a la hora de inicio.')
       return
     }
 
-    const espacioElegido = espacios.find((item) => item.nombre === espacio)
-
-    if (!espacioElegido) {
-      setTipoMensajeReserva('error')
-      setMensajeReserva('Seleccioná un espacio válido.')
+    if (ini < 8 || fin > 20) {
+      setMensaje('El horario debe estar comprendido entre las 8 y las 20 hs.')
       return
     }
 
-    if (espacioElegido.estado === 'Mantenimiento') {
-      setTipoMensajeReserva('error')
-      setMensajeReserva(
-        'Este espacio está en mantenimiento. Elegí otro espacio.'
-      )
-      return
+    const req = equipo
+      ? [{ n: equipo, cant: cantidadEquipo }]
+      : []
+
+    const nuevoPedido = {
+      id: 'p' + Date.now(),
+      canal: 'Formulario',
+      sol,
+      titulo,
+      tipo: 'Solicitud',
+      dia,
+      ini,
+      fin,
+      cupo,
+      resp,
+      req,
+      estado: 'Por asignar',
     }
 
-    if (participantes > espacioElegido.capacidad) {
-      setTipoMensajeReserva('error')
-      setMensajeReserva(
-        `La capacidad máxima de ${espacioElegido.nombre} es de ${espacioElegido.capacidad} personas.`
-      )
-      return
-    }
-
-    // Verificar si el espacio ya tiene una reserva en ese horario.
-    const conflictoEspacio = reservas.some((reserva) => {
-      const mismaFecha = reserva.fecha === fecha
-      const mismoEspacio = reserva.espacio === espacio
-
-      const horariosSeSuperponen =
-        horaInicio < reserva.horaFin && horaFin > reserva.horaInicio
-
-      return mismaFecha && mismoEspacio && horariosSeSuperponen
-    })
-
-    if (conflictoEspacio) {
-      setTipoMensajeReserva('error')
-      setMensajeReserva(
-        `El ${espacio} ya tiene una reserva en ese horario. Probá con otro horario o elegí otro espacio.`
-      )
-      return
-    }
-
-    const nuevaReserva = {
-      id: Date.now(),
-      actividad,
-      fecha,
-      horaInicio,
-      horaFin,
-      espacio,
-      participantes,
-      recursos: recursosSeleccionados,
-      estado: 'Pendiente',
-    }
-
-    guardarReservas([...reservas, nuevaReserva])
+    dispatch({ type: 'pedidoNuevo', pedido: nuevoPedido })
 
     event.currentTarget.reset()
-
-    setEspacioReserva(
-      espacios.find((item) => item.estado !== 'Mantenimiento')?.nombre ||
-      espacios[0].nombre
-    )
-
-    setTipoMensajeReserva('exito')
-    setMensajeReserva('La solicitud de reserva se registró correctamente.')
+    setMensaje('El pedido se registró correctamente.')
   }
 
-  function eliminarReserva(id) {
-    guardarReservas(reservas.filter((reserva) => reserva.id !== id))
-    setTipoMensajeReserva('exito')
-    setMensajeReserva('La solicitud se eliminó correctamente.')
-  }
+  const pendientes = pedidos.filter(
+    pedido => pedido.estado === 'Por asignar'
+  ).length
 
-  function agregarRecurso(event) {
-    event.preventDefault()
-
-    const formulario = new FormData(event.currentTarget)
-
-    const datosRecurso = {
-      nombre: formulario.get('nombre').trim(),
-      categoria: formulario.get('categoria'),
-      cantidad: Number(formulario.get('cantidad')),
-      espacio: formulario.get('espacio'),
-      estado: formulario.get('estado'),
-    }
-
-    if (recursoEditando) {
-      const recursosActualizados = recursos.map((recurso) =>
-        recurso.id === recursoEditando.id
-          ? { ...recurso, ...datosRecurso }
-          : recurso
-      )
-
-      guardarRecursos(recursosActualizados)
-      setRecursoEditando(null)
-    } else {
-      const nuevoRecurso = {
-        id: Date.now(),
-        ...datosRecurso,
-      }
-
-      guardarRecursos([...recursos, nuevoRecurso])
-    }
-
-    event.currentTarget.reset()
-  }
-
-  function eliminarRecurso(id) {
-    const nuevosRecursos = recursos.filter((recurso) => recurso.id !== id)
-
-    guardarRecursos(nuevosRecursos)
-
-    if (recursoEditando?.id === id) {
-      setRecursoEditando(null)
-    }
-  }
-
-  function editarRecurso(recurso) {
-    setRecursoEditando(recurso)
-  }
+  const espaciosDisponibles = espacios.filter(
+    espacio => espacio.estado === 'Disponible'
+  ).length
 
   if (!logueado) {
     return <Login onLogin={() => setLogueado(true)} />
@@ -221,12 +93,12 @@ function App() {
 
   return (
     <div className="app">
+
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark">
             <img src="/logo.jpg" alt="Logo de SIGES" />
           </div>
-
           <div>
             <h1>SIGES</h1>
             <span>Gestión de espacios</span>
@@ -238,40 +110,66 @@ function App() {
         <nav className="menu">
           <a
             className={`menu-item ${seccionActiva === 'inicio' ? 'active' : ''}`}
-            href="#inicio"
-            onClick={() => setSeccionActiva('inicio')}
+            href="/"
+            onClick={event => {
+              event.preventDefault()
+              irASeccion('inicio')
+            }}
           >
             ▦ <span>Inicio</span>
           </a>
 
           <a
             className={`menu-item ${seccionActiva === 'reservas' ? 'active' : ''}`}
-            href="#reservas"
-            onClick={() => setSeccionActiva('reservas')}
+            href="/reservas"
+            onClick={event => {
+              event.preventDefault()
+              irASeccion('reservas')
+            }}
           >
             ▣ <span>Reservas</span>
           </a>
 
           <a
+            className={`menu-item ${seccionActiva === 'pedidos' ? 'active' : ''}`}
+            href="/pedidos"
+            onClick={event => {
+              event.preventDefault()
+              irASeccion('pedidos')
+            }}
+          >
+            ▤ <span>Pedidos</span>
+          </a>
+
+          <a
             className={`menu-item ${seccionActiva === 'espacios' ? 'active' : ''}`}
-            href="#espacios"
-            onClick={() => setSeccionActiva('espacios')}
+            href="/espacios"
+            onClick={event => {
+              event.preventDefault()
+              irASeccion('espacios')
+            }}
           >
             ⌂ <span>Espacios</span>
           </a>
 
           <a
             className={`menu-item ${seccionActiva === 'recursos' ? 'active' : ''}`}
-            href="#recursos"
-            onClick={() => setSeccionActiva('recursos')}
+            href="/recursos"
+            onClick={event => {
+              event.preventDefault()
+              irASeccion('recursos')
+            }}
           >
             ▤ <span>Recursos y equipos</span>
           </a>
 
           <a
-            className={`menu-item ${seccionActiva === 'listado-reservas' ? 'active' : ''}`}
-            href="#listado-reservas"
-            onClick={() => setSeccionActiva('listado-reservas')}
+            className={`menu-item ${seccionActiva === 'calendario' ? 'active' : ''}`}
+            href="/calendario"
+            onClick={event => {
+              event.preventDefault()
+              irASeccion('calendario')
+            }}
           >
             ▦ <span>Calendario</span>
           </a>
@@ -279,666 +177,445 @@ function App() {
 
         <div className="sidebar-bottom">
           <div className="user-avatar">VH</div>
-
           <div className="user-info">
             <strong>Usuario SIGES</strong>
             <span>Panel de gestión</span>
           </div>
-
           <button
             className="logout-button"
-            onClick={() => setLogueado(false)}
             type="button"
+            onClick={() => setLogueado(false)}
           >
             Cerrar sesión
           </button>
         </div>
       </aside>
 
-      <main className="main-content" id="inicio">
+      <main className="main-content">
+
         <header className="topbar">
           <div>
-            <span className="breadcrumb">SIGES / Inicio</span>
+            <span className="breadcrumb">
+              SIGES / {seccionActiva}
+            </span>
             <h2>Panel de gestión</h2>
           </div>
 
           <div className="topbar-right">
             <span className="system-status">
-              <span className="status-dot" /> Sistema operativo
+              <span className="status-dot" />
+              Sistema operativo
             </span>
             <div className="top-avatar">VH</div>
           </div>
         </header>
 
-        <section className="welcome">
-          <div>
-            <span className="eyebrow">SISTEMA INTEGRAL DE GESTIÓN</span>
-            <h2>¡Bienvenida a SIGES!</h2>
-            <p>
-              Administrá espacios, recursos y solicitudes de reserva desde un
-              solo lugar.
-            </p>
-          </div>
+        {seccionActiva === 'inicio' && (
+          <>
+            <section className="welcome">
+              <div>
+                <span className="eyebrow">
+                  SISTEMA INTEGRAL DE GESTIÓN
+                </span>
+                <h2>¡Bienvenida a SIGES!</h2>
+                <p>
+                  Administrá espacios, recursos y solicitudes de reserva
+                  desde un solo lugar.
+                </p>
+              </div>
+              <div className="welcome-icon">▦</div>
+            </section>
 
-          <div className="welcome-icon">▦</div>
-        </section>
+            <section className="stats-grid">
+              <article className="stat-card">
+                <div className="stat-icon blue">▣</div>
+                <span>Espacios registrados</span>
+                <strong>{espacios.length}</strong>
+                <small>Espacios del sistema</small>
+              </article>
 
-        <section className="stats-grid">
-          <article className="stat-card">
-            <div className="stat-icon blue">▣</div>
-            <span>Reservas de la semana</span>
-            <strong>—</strong>
-            <small>Reservas registradas esta semana</small>
-          </article>
+              <article className="stat-card">
+                <div className="stat-icon green">✓</div>
+                <span>Espacios disponibles</span>
+                <strong>{espaciosDisponibles}</strong>
+                <small>Actualmente disponibles</small>
+              </article>
 
-          <article className="stat-card">
-            <div className="stat-icon green">✓</div>
-            <span>Asistencia real</span>
-            <strong>—</strong>
-            <small>Asistencias registradas</small>
-          </article>
+              <article className="stat-card">
+                <div className="stat-icon orange">◷</div>
+                <span>Actividades registradas</span>
+                <strong>{actividades.filter(a => !a.cancelada).length}</strong>
+                <small>Actividades no canceladas</small>
+              </article>
 
-          <article className="stat-card">
-            <div className="stat-icon orange">◷</div>
-            <span>Cancelaciones</span>
-            <strong>—</strong>
-            <small>Reservas canceladas</small>
-          </article>
+              <article className="stat-card">
+                <div className="stat-icon purple">▤</div>
+                <span>Pedidos pendientes</span>
+                <strong>{pendientes}</strong>
+                <small>Solicitudes por asignar</small>
+              </article>
+            </section>
 
-          <article className="stat-card">
-            <div className="stat-icon purple">▤</div>
-            <span>Pedidos pendientes</span>
-            <strong>
-              {reservas.filter((reserva) => reserva.estado === 'Pendiente').length}
-            </strong>
-            <small>Solicitudes pendientes de revisión</small>
-          </article>
-        </section>
-
-        {/* Gráfico único: comparación de los seis espacios */}
-        <section className="panel asistencia-panel">
-          <div className="panel-heading">
-            <div>
-              <h3>Reservado vs. asistió por espacios</h3>
-              <p>Comparación entre reservas y asistencia real</p>
-            </div>
-          </div>
-
-          <div className="grafico-leyenda">
-            <span>
-              <i className="leyenda-reservado"></i>
-              Reservado
-            </span>
-
-            <span>
-              <i className="leyenda-asistio"></i>
-              Asistió
-            </span>
-          </div>
-
-          <div className="grafico-espacios">
-            {[
-              { nombre: 'Aula 01', asistio: 19, reservado: 35 },
-              { nombre: 'SUM', asistio: 25, reservado: 80 },
-              { nombre: 'Aula Master', asistio: 23, reservado: 33 },
-              { nombre: 'Lab Simulación', asistio: 26, reservado: 30 },
-              { nombre: 'Lab Informática', asistio: 21, reservado: 28 },
-              { nombre: 'Aula Robótica', asistio: 17, reservado: 22 },
-            ].map((espacio) => (
-              <div className="grafico-fila" key={espacio.nombre}>
-                <div className="grafico-info">
-                  <strong>{espacio.nombre}</strong>
-                  <span>{espacio.asistio}/{espacio.reservado}</span>
-                </div>
-
-                <div className="grafico-barras">
-                  <div className="barra barra-reservado"></div>
-                  <div
-                    className="barra barra-asistio"
-                    style={{
-                      width: `${(espacio.asistio / espacio.reservado) * 100}%`,
-                    }}
-                  ></div>
+            <section className="panel dashboard-panel">
+              <div className="panel-heading">
+                <div>
+                  <h3>Espacios</h3>
+                  <p>Estado de los espacios registrados</p>
                 </div>
               </div>
-            ))}
-          </div>
-        </section>
 
-        <section className="content-grid">
-          <article className="panel spaces-panel" id="espacios">
+              <div className="spaces-grid">
+                {espacios.map(espacio => (
+                  <article className="space-card" key={espacio.id}>
+                    <div className="space-card-top">
+                      <span className="space-icon">⌂</span>
+                      <span className={`status ${espacio.estado === 'Disponible' ? 'available' : espacio.estado === 'Mantenimiento' ? 'maintenance' : ''}`}>
+                        {espacio.estado}
+                      </span>
+                    </div>
+                    <h4>{espacio.nombre}</h4>
+                    <p>{espacio.tipo}</p>
+                    <div className="space-details">
+                      <span>Capacidad: {espacio.cap} personas</span>
+                      <span>Piso: {espacio.piso}</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            <section className="panel reservation-panel">
+              <div className="panel-heading">
+                <div>
+                  <h3>Accesos rápidos</h3>
+                  <p>Continuá con las tareas principales de SIGES</p>
+                </div>
+              </div>
+
+              <div className="quick-actions">
+                <button type="button" onClick={() => irASeccion('reservas')}>
+                  <span>＋</span>
+                  <strong>Registrar un pedido</strong>
+                  <small>Ingresá una nueva solicitud</small>
+                </button>
+
+                <button type="button" onClick={() => irASeccion('espacios')}>
+                  <span>⌂</span>
+                  <strong>Consultar espacios</strong>
+                  <small>Revisá capacidad y estado</small>
+                </button>
+
+                <button type="button" onClick={() => irASeccion('recursos')}>
+                  <span>▤</span>
+                  <strong>Ver recursos</strong>
+                  <small>Equipos asociados a los espacios</small>
+                </button>
+              </div>
+            </section>
+          </>
+        )}
+
+        {seccionActiva === 'reservas' && (
+          <>
+            <section className="panel form-panel">
+              <div className="panel-heading">
+                <div>
+                  <h3>Nueva solicitud de espacio</h3>
+                  <p>Completá los datos para registrar un pedido.</p>
+                </div>
+              </div>
+
+              <form
+                className="resource-form reservation-form"
+                onSubmit={agregarPedido}
+              >
+                <div className="form-group">
+                  <label htmlFor="pedido-titulo">Actividad o motivo</label>
+                  <input
+                    id="pedido-titulo"
+                    name="titulo"
+                    type="text"
+                    placeholder="Ej. Capacitación de equipo"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="pedido-area">Área solicitante</label>
+                  <select id="pedido-area" name="sol" required>
+                    {AREAS.map(area => (
+                      <option key={area} value={area}>{area}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="pedido-responsable">Responsable</label>
+                  <input
+                    id="pedido-responsable"
+                    name="resp"
+                    type="text"
+                    placeholder="Nombre del responsable"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="pedido-dia">Día</label>
+                  <select id="pedido-dia" name="dia" required>
+                    {DIAS.map((dia, index) => (
+                      <option key={dia} value={index}>{dia}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="pedido-inicio">Hora de inicio</label>
+                  <select id="pedido-inicio" name="ini" required>
+                    {Array.from({ length: 13 }, (_, i) => i + 8).map(hora => (
+                      <option key={hora} value={hora}>
+                        {String(hora).padStart(2, '0')}:00
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="pedido-fin">Hora de finalización</label>
+                  <select id="pedido-fin" name="fin" required>
+                    {Array.from({ length: 13 }, (_, i) => i + 8).map(hora => (
+                      <option key={hora} value={hora}>
+                        {String(hora).padStart(2, '0')}:00
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="pedido-cupo">Cantidad de personas</label>
+                  <input
+                    id="pedido-cupo"
+                    name="cupo"
+                    type="number"
+                    min="1"
+                    placeholder="Ej. 20"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="pedido-equipo">Equipamiento solicitado</label>
+                  <select id="pedido-equipo" name="equipo">
+                    <option value="">Sin equipamiento adicional</option>
+                    {[...new Set(equipos.map(equipo => equipo.n))].map(nombre => (
+                      <option key={nombre} value={nombre}>{nombre}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="pedido-cantidad-equipo">Cantidad de equipos</label>
+                  <input
+                    id="pedido-cantidad-equipo"
+                    name="cantidadEquipo"
+                    type="number"
+                    min="1"
+                    defaultValue="1"
+                  />
+                </div>
+
+                <div className="resource-form-actions">
+                  <button type="submit">Registrar pedido</button>
+                </div>
+              </form>
+
+              {mensaje && (
+                <p className="reservation-message" role="status">
+                  {mensaje}
+                </p>
+              )}
+            </section>
+
+            <section className="panel">
+              <div className="panel-heading">
+                <div>
+                  <h3>Solicitudes registradas</h3>
+                  <p>{pedidos.length} pedidos en el sistema</p>
+                </div>
+              </div>
+
+              <div className="pedidos-table-wrapper">
+                <table className="pedidos-table">
+                  <thead>
+                    <tr>
+                      <th>Actividad</th>
+                      <th>Área</th>
+                      <th>Día</th>
+                      <th>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pedidos.map(pedido => (
+                      <tr key={pedido.id}>
+                        <td><strong>{pedido.titulo}</strong></td>
+                        <td>{pedido.sol}</td>
+                        <td>{DIAS[pedido.dia]}</td>
+                        <td>{pedido.estado}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </>
+        )}
+
+        {seccionActiva === 'pedidos' && (
+          <section className="panel pedidos-panel">
             <div className="panel-heading">
               <div>
-                <h3>Espacios</h3>
-                <p>Estado actual de los espacios registrados</p>
+                <h3>Gestión de pedidos</h3>
+                <p>Evaluá solicitudes y asigná espacios disponibles.</p>
               </div>
-
-              <button
-                className="text-button"
-                type="button"
-                onClick={() =>
-                  document
-                    .getElementById('form-reserva')
-                    ?.scrollIntoView({ behavior: 'smooth' })
-                }
-              >
-                Nueva reserva +
-              </button>
+              <span className="pedidos-total">{pedidos.length} pedidos</span>
             </div>
 
-            <div className="spaces-list">
-              {espacios.map((espacio) => (
-                <div className="space-row" key={espacio.nombre}>
-                  <div className="space-icon">⌂</div>
+            <Pedidos />
+          </section>
+        )}
 
-                  <div className="space-details">
-                    <strong>{espacio.nombre}</strong>
-                    <span>
-                      {espacio.tipo} · Capacidad: {espacio.capacidad} personas
+        {seccionActiva === 'espacios' && (
+          <section className="panel">
+            <div className="panel-heading">
+              <div>
+                <h3>Espacios registrados</h3>
+                <p>Consultá capacidad, características y estado.</p>
+              </div>
+            </div>
+
+            <div className="spaces-grid">
+              {espacios.map(espacio => (
+                <article className="space-card" key={espacio.id}>
+                  <div className="space-card-top">
+                    <span className="space-icon">⌂</span>
+                    <span className={`status ${espacio.estado === 'Disponible' ? 'available' : espacio.estado === 'Mantenimiento' ? 'maintenance' : ''}`}>
+                      {espacio.estado}
                     </span>
                   </div>
 
-                  <span
-                    className={`badge ${espacio.estado
-                      .toLowerCase()
-                      .replace('ó', 'o')}`}
-                  >
-                    {espacio.estado}
-                  </span>
-                </div>
+                  <h4>{espacio.nombre}</h4>
+                  <p>{espacio.tipo}</p>
+
+                  <div className="space-details">
+                    <span>Capacidad: {espacio.cap} personas</span>
+                    <span>Piso: {espacio.piso}</span>
+                    {espacio.hasta && <span>Hasta: {espacio.hasta}</span>}
+                  </div>
+
+                  {espacio.car?.length > 0 && (
+                    <div className="space-details">
+                      <span>Características: {espacio.car.join(', ')}</span>
+                    </div>
+                  )}
+
+                  {espacio.motivo && (
+                    <p>{espacio.motivo}</p>
+                  )}
+                </article>
               ))}
             </div>
-          </article>
+          </section>
+        )}
 
-          <article className="panel activity-panel">
+        {seccionActiva === 'recursos' && (
+          <section className="panel">
             <div className="panel-heading">
               <div>
-                <h3>Actividad reciente</h3>
-                <p>Resumen de movimientos</p>
-              </div>
-
-              <span className="activity-symbol">◷</span>
-            </div>
-
-            {reservas.length === 0 ? (
-              <div className="empty-activity">
-                <div className="empty-icon">▤</div>
-                <strong>Todo listo para empezar</strong>
-                <p>
-                  Cuando registres reservas, vas a poder consultarlas desde
-                  esta sección.
-                </p>
-              </div>
-            ) : (
-              <div className="spaces-list">
-                {reservas.slice(-3).reverse().map((reserva) => (
-                  <div className="space-row" key={reserva.id}>
-                    <div className="space-icon">📅</div>
-                    <div className="space-details">
-                      <strong>{reserva.actividad}</strong>
-                      <span>
-                        {reserva.fecha} · {reserva.espacio}
-                      </span>
-                    </div>
-                    <span className="badge">{reserva.estado}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </article>
-        </section>
-
-        <section className="panel reservation-panel" id="reservas">
-          <div className="panel-heading">
-            <div>
-              <h3>Accesos rápidos</h3>
-              <p>Continuá con las tareas principales de SIGES</p>
-            </div>
-          </div>
-
-          <div className="quick-actions">
-            <button
-              type="button"
-              onClick={() =>
-                document
-                  .getElementById('form-reserva')
-                  ?.scrollIntoView({ behavior: 'smooth' })
-              }
-            >
-              <span>＋</span>
-              <strong>Solicitar una reserva</strong>
-              <small>Elegí fecha, horario y espacio</small>
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                document
-                  .getElementById('espacios')
-                  ?.scrollIntoView({ behavior: 'smooth' })
-              }
-            >
-              <span>⌂</span>
-              <strong>Consultar espacios</strong>
-              <small>Revisá capacidad y estado</small>
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                document
-                  .getElementById('recursos')
-                  ?.scrollIntoView({ behavior: 'smooth' })
-              }
-            >
-              <span>▤</span>
-              <strong>Ver recursos</strong>
-              <small>Equipos asociados a los espacios</small>
-            </button>
-          </div>
-        </section>
-
-        <section className="panel form-panel" id="form-reserva">
-          <div className="panel-heading">
-            <div>
-              <h3>Nueva solicitud de reserva</h3>
-              <p>
-                Completá los datos de la actividad y elegí el espacio que
-                necesitás.
-              </p>
-            </div>
-          </div>
-
-          <form
-            className="resource-form reservation-form"
-            onSubmit={agregarReserva}
-          >
-            <div className="form-group">
-              <label htmlFor="actividad-reserva">Actividad o motivo</label>
-              <input
-                id="actividad-reserva"
-                type="text"
-                name="actividad"
-                placeholder="Ej. Capacitación de equipo"
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="fecha-reserva">Fecha</label>
-              <input
-                id="fecha-reserva"
-                type="date"
-                name="fecha"
-                min={new Date().toLocaleDateString('en-CA')}
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="hora-inicio-reserva">Hora de inicio</label>
-              <input
-                id="hora-inicio-reserva"
-                type="time"
-                name="horaInicio"
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="hora-fin-reserva">Hora de finalización</label>
-              <input
-                id="hora-fin-reserva"
-                type="time"
-                name="horaFin"
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="espacio-reserva">Espacio</label>
-              <select
-                id="espacio-reserva"
-                name="espacio"
-                value={espacioReserva}
-                onChange={(event) => setEspacioReserva(event.target.value)}
-                required
-              >
-                {espacios.map((espacio) => (
-                  <option
-                    key={espacio.nombre}
-                    value={espacio.nombre}
-                    disabled={espacio.estado === 'Mantenimiento'}
-                  >
-                    {espacio.nombre} — capacidad {espacio.capacidad}
-                    {espacio.estado === 'Mantenimiento'
-                      ? ' (En mantenimiento)'
-                      : ''}
-                  </option>
-                ))}
-              </select>
-              <small>
-                Los espacios en mantenimiento no se pueden seleccionar.
-              </small>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="participantes-reserva">
-                Cantidad de participantes
-              </label>
-              <input
-                id="participantes-reserva"
-                type="number"
-                name="participantes"
-                min="1"
-                max={
-                  espacios.find(
-                    (espacio) => espacio.nombre === espacioReserva
-                  )?.capacidad
-                }
-                placeholder="Ej. 15"
-                required
-              />
-              <small>
-                Capacidad máxima:{' '}
-                {
-                  espacios.find(
-                    (espacio) => espacio.nombre === espacioReserva
-                  )?.capacidad
-                }{' '}
-                personas.
-              </small>
-            </div>
-
-            <div className="form-group">
-              <label>Recursos y equipos disponibles</label>
-
-              {recursos.some(
-                (recurso) =>
-                  recurso.espacio === espacioReserva &&
-                  recurso.estado === 'Disponible'
-              ) ? (
-                <div className="reservation-resources">
-                  {recursos
-                    .filter(
-                      (recurso) =>
-                        recurso.espacio === espacioReserva &&
-                        recurso.estado === 'Disponible'
-                    )
-                    .map((recurso) => (
-                      <label
-                        className="reservation-resource-option"
-                        key={recurso.id}
-                      >
-                        <input
-                          type="checkbox"
-                          name="recursos"
-                          value={recurso.id}
-                        />
-                        <span>
-                          <strong>{recurso.nombre}</strong>
-                          <small>
-                            Cantidad disponible: {recurso.cantidad}
-                          </small>
-                        </span>
-                      </label>
-                    ))}
-                </div>
-              ) : (
-                <p className="form-hint">
-                  No hay recursos disponibles asociados a este espacio.
-                </p>
-              )}
-            </div>
-
-            <div className="resource-form-actions">
-              <button type="submit">Enviar solicitud</button>
-            </div>
-          </form>
-
-          {mensajeReserva && (
-            <p
-              className={`reservation-message ${tipoMensajeReserva}`}
-              role="status"
-            >
-              {mensajeReserva}
-            </p>
-          )}
-        </section>
-
-        <section className="panel" id="listado-reservas">
-          <div className="panel-heading">
-            <div>
-              <h3>Reservas registradas</h3>
-              <p>
-                Solicitudes guardadas en este navegador: {reservas.length}
-              </p>
-            </div>
-          </div>
-
-          {reservas.length === 0 ? (
-            <div className="form-placeholder">
-              <span>📅</span>
-              <div>
-                <strong>Todavía no hay reservas</strong>
-                <p>
-                  Cuando envíes una solicitud, va a aparecer en este listado.
-                </p>
+                <h3>Recursos y equipos</h3>
+                <p>Equipamiento registrado en el sistema.</p>
               </div>
             </div>
-          ) : (
+
             <div className="spaces-grid">
-              {reservas.map((reserva) => {
-                const nombresRecursos = reserva.recursos
-                  .map(
-                    (idRecurso) =>
-                      recursos.find((recurso) => recurso.id === idRecurso)
-                        ?.nombre
-                  )
-                  .filter(Boolean)
+              {equipos.map(equipo => (
+                <article className="space-card" key={equipo.id}>
+                  <div className="space-card-top">
+                    <span className="space-icon">📦</span>
+                    <span className={`status ${equipo.estado === 'Disponible' ? 'available' : equipo.estado === 'Mantenimiento' ? 'maintenance' : ''}`}>
+                      {equipo.estado}
+                    </span>
+                  </div>
 
-                return (
-                  <article className="space-card" key={reserva.id}>
-                    <div className="space-card-top">
-                      <span className="space-icon">📅</span>
-                      <span className="status">{reserva.estado}</span>
+                  <h4>{equipo.n}</h4>
+                  <p>{equipo.cat}</p>
+
+                  <div className="space-details">
+                    <span>Cantidad: {equipo.cant}</span>
+                    <span>Ubicación: {equipo.ubic}</span>
+                    <span>{equipo.fijo ? 'Equipamiento fijo' : 'Equipamiento móvil'}</span>
+                    {equipo.critico && <span>Equipo crítico</span>}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {seccionActiva === 'calendario' && (
+          <section className="panel">
+            <div className="panel-heading">
+              <div>
+                <h3>Calendario de actividades</h3>
+                <p>Actividades registradas por día y espacio.</p>
+              </div>
+            </div>
+
+            {DIAS.map((dia, index) => {
+              const actividadesDia = actividades.filter(
+                actividad => actividad.dia === index && !actividad.cancelada
+              )
+
+              return (
+                <div className="panel" key={dia}>
+                  <h4>{dia}</h4>
+
+                  {actividadesDia.length === 0 ? (
+                    <p>No hay actividades registradas.</p>
+                  ) : (
+                    <div className="spaces-grid">
+                      {actividadesDia.map(actividad => {
+                        const espacio = espacios.find(
+                          item => item.id === actividad.sp
+                        )
+
+                        return (
+                          <article className="space-card" key={actividad.id}>
+                            <h4>{actividad.titulo}</h4>
+                            <p>{actividad.tipo}</p>
+                            <div className="space-details">
+                              <span>
+                                Horario: {actividad.ini}:00 a {actividad.fin}:00 hs
+                              </span>
+                              <span>Espacio: {espacio?.nombre || 'Sin asignar'}</span>
+                              <span>Participantes: {actividad.insc}</span>
+                              <span>Responsable: {actividad.resp}</span>
+                            </div>
+                          </article>
+                        )
+                      })}
                     </div>
-
-                    <h4>{reserva.actividad}</h4>
-                    <p>{reserva.espacio}</p>
-
-                    <div className="space-details">
-                      <span>Fecha: {reserva.fecha}</span>
-                      <span>
-                        Horario: {reserva.horaInicio} a {reserva.horaFin}
-                      </span>
-                      <span>Participantes: {reserva.participantes}</span>
-                      <span>
-                        Recursos:{' '}
-                        {nombresRecursos.length
-                          ? nombresRecursos.join(', ')
-                          : 'Ninguno'}
-                      </span>
-                    </div>
-
-                    <div className="resource-actions">
-                      <button
-                        type="button"
-                        className="delete-button"
-                        onClick={() => eliminarReserva(reserva.id)}
-                      >
-                        Eliminar solicitud
-                      </button>
-                    </div>
-                  </article>
-                )
-              })}
-            </div>
-          )}
-        </section>
-
-        <section className="panel" id="recursos">
-          <div className="panel-heading">
-            <div>
-              <h3>Recursos y equipos</h3>
-              <p>Consultá los equipos disponibles para cada espacio</p>
-            </div>
-          </div>
-
-          <form
-            key={recursoEditando?.id ?? 'nuevo'}
-            id="form-recursos"
-            className="form-panel resource-form"
-            onSubmit={agregarRecurso}
-          >
-            <h4>
-              {recursoEditando ? 'Editar recurso' : 'Agregar recurso'}
-            </h4>
-
-            <div className="form-group">
-              <label htmlFor="nombre-recurso">Nombre del recurso</label>
-              <input
-                id="nombre-recurso"
-                type="text"
-                name="nombre"
-                placeholder="Ej. Proyector"
-                defaultValue={recursoEditando?.nombre || ''}
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="categoria-recurso">Categoría</label>
-              <select
-                id="categoria-recurso"
-                name="categoria"
-                defaultValue={
-                  recursoEditando?.categoria || 'Equipo audiovisual'
-                }
-                required
-              >
-                <option value="Equipo audiovisual">
-                  Equipo audiovisual
-                </option>
-                <option value="Equipos informáticos">
-                  Equipos informáticos
-                </option>
-                <option value="Equipo de audio">Equipo de audio</option>
-                <option value="Otro">Otro</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="cantidad-recurso">Cantidad</label>
-              <input
-                id="cantidad-recurso"
-                type="number"
-                name="cantidad"
-                min="1"
-                defaultValue={recursoEditando?.cantidad ?? 1}
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="espacio-recurso">Espacio asociado</label>
-              <select
-                id="espacio-recurso"
-                name="espacio"
-                defaultValue={recursoEditando?.espacio || espacios[0].nombre}
-                required
-              >
-                {espacios.map((espacio) => (
-                  <option key={espacio.nombre} value={espacio.nombre}>
-                    {espacio.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="estado-recurso">Estado</label>
-              <select
-                id="estado-recurso"
-                name="estado"
-                defaultValue={recursoEditando?.estado || 'Disponible'}
-                required
-              >
-                <option value="Disponible">Disponible</option>
-                <option value="En uso">En uso</option>
-                <option value="Mantenimiento">Mantenimiento</option>
-              </select>
-            </div>
-
-            <div className="resource-form-actions">
-              <button type="submit">
-                {recursoEditando ? 'Guardar cambios' : 'Agregar recurso'}
-              </button>
-
-              {recursoEditando && (
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={() => setRecursoEditando(null)}
-                >
-                  Cancelar edición
-                </button>
-              )}
-            </div>
-          </form>
-
-          <div className="spaces-grid">
-            {recursos.map((recurso) => (
-              <article className="space-card" key={recurso.id}>
-                <div className="space-card-top">
-                  <span className="space-icon">📦</span>
-
-                  <span
-                    className={`status ${recurso.estado === 'Disponible'
-                      ? 'available'
-                      : recurso.estado === 'Mantenimiento'
-                        ? 'maintenance'
-                        : ''
-                      }`}
-                  >
-                    {recurso.estado}
-                  </span>
+                  )}
                 </div>
-
-                <h4>{recurso.nombre}</h4>
-                <p>{recurso.categoria}</p>
-
-                <div className="space-details">
-                  <span>Cantidad: {recurso.cantidad}</span>
-                  <span>{recurso.espacio}</span>
-                </div>
-
-                <div className="resource-actions">
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() => editarRecurso(recurso)}
-                  >
-                    Editar
-                  </button>
-
-                  <button
-                    type="button"
-                    className="delete-button"
-                    onClick={() => eliminarRecurso(recurso.id)}
-                  >
-                    Eliminar
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
+              )
+            })}
+          </section>
+        )}
 
         <footer className="footer">
           SIGES · Sistema de gestión de espacios
           <span>Versión de desarrollo</span>
         </footer>
+
       </main>
     </div>
   )
