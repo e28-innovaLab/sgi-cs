@@ -1,3 +1,4 @@
+from datetime import timedelta
 from collections import Counter, defaultdict
 
 from espacios.models import Aula, Equipamiento
@@ -45,7 +46,15 @@ def espacios(reservas, filtros):
             for aula in reserva.aulas.all():
                 por_aula[aula.pk].append(reserva)
     apertura, cierre = minuto(filtros['hora_apertura']), minuto(filtros['hora_cierre'])
-    referencia = (cierre - apertura) * ((filtros['hasta'] - filtros['desde']).days + 1)
+    dias_totales = (filtros['hasta'] - filtros['desde']).days + 1
+
+    dias_habiles = sum(
+        1
+        for dia in range(dias_totales)
+        if (filtros['desde'] + timedelta(days=dia)).weekday() < 5
+    )
+
+    referencia = (cierre - apertura) * dias_habiles
     resultado = []
     for aula in aulas:
         por_fecha = defaultdict(list)
@@ -59,7 +68,7 @@ def espacios(reservas, filtros):
             'aula_id': aula.pk, 'nombre': aula.nombre, 'estado_actual': aula.estado,
             'reservas': len(asignadas),
             'minutos_ocupados': round(ocupados, 2), 'minutos_referencia': round(referencia, 2),
-            'ocupacion_porcentaje': round(100 * ocupados / referencia, 2),
+            'ocupacion_porcentaje': round(100 * ocupados / referencia, 2) if referencia else 0,
         })
     return sorted(resultado, key=lambda fila: (-fila['minutos_ocupados'], fila['aula_id']))
 

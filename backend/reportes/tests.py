@@ -133,6 +133,36 @@ class ReportesTests(APITestCase):
         self.assertEqual(recortado['minutos_ocupados'], 60)
         self.assertEqual(recortado['ocupacion_porcentaje'], 100)
 
+    def test_ocupacion_referencia_solo_considera_dias_habiles(self):
+        # Tomamos el lunes de la semana en la que cae self.fecha.
+        desde = self.fecha - timedelta(days=self.fecha.weekday())
+        hasta = desde + timedelta(days=6)
+
+        # Creamos una reserva confirmada de dos horas el lunes.
+        reserva = Reserva.objects.create(
+            actividad=self.actividad,
+            estado_reserva=self.estados['Confirmada'],
+            fecha_reserva=desde,
+            horario_inicio=time(10),
+            horario_fin=time(12),
+        )
+        ReservaAula.objects.create(reserva=reserva, aula=self.aula)
+
+        filas = self.consultar(
+            self.urls[1],
+            desde=desde.isoformat(),
+            hasta=hasta.isoformat(),
+        )['results']
+
+        fila = next(f for f in filas if f['aula_id'] == self.aula.pk)
+
+        # 12 horas por día × 5 días hábiles = 3600 minutos.
+        self.assertEqual(fila['minutos_referencia'], 3600)
+        self.assertEqual(fila['minutos_ocupados'], 120)
+        self.assertEqual(fila['ocupacion_porcentaje'], 3.33)
+
+
+
     def test_equipamiento_distingue_demanda_de_cantidad_asignada(self):
         self.solicitar(self.reserva(), cantidad=5, reservada=3)
         self.solicitar(self.reserva(estado='Pendiente'), cantidad=4, reservada=None)

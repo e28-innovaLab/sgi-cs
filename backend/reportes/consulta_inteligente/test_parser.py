@@ -158,3 +158,17 @@ class ParserConsultaTests(SimpleTestCase):
         for capacidad in ['para 20', 'para 20.5 personas']:
             with self.subTest(capacidad=capacidad), self.assertRaises(PreguntaNoReconocida):
                 self.interpretar(f'Aulas disponibles mañana de 10 a 12 {capacidad}')
+
+    def test_resumen_reservas_por_tipo_generico(self):
+        for pregunta in [
+            'Cuantas reservas de aulas hubo este mes?',
+            'Cuantas reservas de espacios hubo este mes?',
+            'Cuantas reservas de equipos hubo este mes?',
+        ]:
+            with self.subTest(pregunta=pregunta):
+                plan = self.interpretar(pregunta)
+                self.assertEqual(plan['intencion'], 'resumen_reservas')
+                self.assertEqual(plan['parametros'], {
+                    'desde': date(2026, 11, 1),
+                    'hasta': self.hoy,
+                })

@@ -124,7 +124,13 @@ def interpretar_pregunta(pregunta, hoy=None):
     nombre_recurso = re.search(
         r'\b(?:aula|laboratorio|taller|equipo|recurso)\s+(?!(?:disponible|libre|con|de|para|que|tuvo|tiene|esta|mas|menos|mayor|menor|en|el|la|este|ayer|hoy|manana|ocupacion|utilizacion|uso|demanda)\b)(\w+)', texto,
     )
-    persona_reserva = re.search(r'\breservas?\s+(?:de|para)\s+(?!\d)(?!(?:este|esta|hoy|ayer|manana|los|las|un|una|el|la|mes|semana)\b)(\w+)', texto)
+    persona_reserva = re.search(
+    r'\breservas?\s+(?:de|para)\s+(?!\d)'
+    r'(?!(?:este|esta|hoy|ayer|manana|los|las|un|una|el|la|mes|semana|'
+    r'aulas?|espacios?|laboratorios?|taller(?:es)?|equipos?|equipamiento|recursos?)\b)'
+    r'(\w+)',
+    texto
+    )
     if nombre_recurso or persona_reserva:
         raise PreguntaNoReconocida('No reconozco ese filtro por nombre. Preguntá por aulas, espacios o equipos en general.')
 
@@ -177,7 +183,7 @@ def interpretar_pregunta(pregunta, hoy=None):
         return {'intencion': 'disponibilidad_aulas', 'parametros': parametros}
 
     if (re.search(r'\b(laboratorios?|taller(?:es)?)\b', texto)
-            or (uso or resumen) and re.search(r'\baulas?\b', texto)):
+            or uso and re.search(r'\baulas?\b', texto)):
         raise PreguntaNoReconocida('El filtro por tipo de espacio solo está disponible en disponibilidad. Para consultar ocupación general, usá espacios.')
 
     if resumen:
