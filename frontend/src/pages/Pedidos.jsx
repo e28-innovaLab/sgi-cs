@@ -36,7 +36,13 @@ export default function Pedidos() {
       {p && (
         <section className="card detalle">
           <h2>{p.titulo}</h2>
-          <p className="muted">{DIAS[p.dia]} {rango(p.ini, p.fin)} · {p.cupo} personas · {p.resp}{p.req?.length ? ' · ' + p.req.map(r => r.cant + ' ' + r.n.toLowerCase()).join(', ') : ''}</p>
+          <p className="muted">
+            {p.fecha
+              ? new Date(p.fecha + 'T12:00:00').toLocaleDateString('es-AR')
+              : DIAS[p.dia]}{' '}
+            {rango(p.ini, p.fin)} · {p.cupo} personas · {p.resp}
+            {p.req?.length ? ' · ' + p.req.map(r => r.cant + ' ' + r.n.toLowerCase()).join(', ') : ''}
+          </p>
           {p.estado === 'Confirmado' ? (
             <Aviso tono="ok" titulo="Reserva confirmada" accion={<Button variant="secundario" size="sm" onClick={() => nav('/calendario')}>Ver en calendario</Button>}>El pedido ya tiene espacio.</Aviso>
           ) : (
@@ -46,7 +52,7 @@ export default function Pedidos() {
                 <div key={o.sp.id} className={'opcion' + (o.sp.id === elegido ? ' sel' : '') + (o.conflictos.length ? ' bloq' : '')}>
                   <div className="opcion-head"><strong>{o.sp.nombre}</strong><span className="muted">Cupo {o.sp.cap} · Piso {o.sp.piso}</span>
                     {o.conflictos.length ? <Badge tono="err">Conflicto</Badge> : o.avisos.length ? <Badge tono="warn">Con avisos</Badge> : <Badge tono="ok">Disponible</Badge>}</div>
-                  <BarraDia bloques={ocupacionDia(o.sp.id, p.dia, state.actividades)} nuevo={p} />
+                  <BarraDia bloques={ocupacionDia(o.sp.id, p.fecha || p.dia, state.actividades)} nuevo={p} />
                   {o.conflictos.map((c, i) => <p key={i} className="txt-err">{c}</p>)}
                   {o.avisos.map((c, i) => <p key={i} className="txt-warn">{c}</p>)}
                   {o.faltantes.filter(x => x.desdeDeposito).map((x, i) => <p key={i} className="muted">Se suman {x.desdeDeposito} {x.n.toLowerCase()} desde el depósito.</p>)}
@@ -64,7 +70,13 @@ export default function Pedidos() {
           {error && <Aviso tono="error" titulo="No pudimos guardar la reserva">Tus datos siguen acá. Probá de nuevo.</Aviso>}
           {op.avisos.length > 0 && <Aviso tono="warn" titulo="Este espacio tiene avisos">{op.avisos.join(' ')}</Aviso>}
           <dl className="resumen">
-            <dt>Actividad</dt><dd>{p.titulo}</dd><dt>Espacio</dt><dd>{op.sp.nombre}</dd><dt>Día y horario</dt><dd>{DIAS[p.dia]} {rango(p.ini, p.fin)}</dd><dt>Personas</dt><dd>{p.cupo}</dd>
+            <dt>Día y horario</dt>
+            <dd>
+              {p.fecha
+                ? new Date(p.fecha + 'T12:00:00').toLocaleDateString('es-AR')
+                : DIAS[p.dia]}{' '}
+              {rango(p.ini, p.fin)}
+            </dd>
             {op.faltantes.length > 0 && <><dt>Equipamiento</dt><dd>{op.faltantes.map(x => x.desdeDeposito + ' ' + x.n.toLowerCase() + ' desde el depósito').join(', ')}</dd></>}
           </dl>
         </Modal>

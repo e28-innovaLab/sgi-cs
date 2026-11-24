@@ -1,7 +1,13 @@
 // Datos de ejemplo. Reemplazar por llamadas a la API (ver src/api/README.md).
 export const HOY = 2; // 0 = lunes … 4 = viernes
 export const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
-export const FERIADOS = [4]; // viernes
+export const FERIADOS = [
+  '2026-11-09',
+  '2026-11-10',
+  '2026-11-23',
+  '2026-12-08',
+  '2026-12-25'
+];
 export const AREAS = ['FTS', 'Formación Profesional', 'Educación Superior', 'Escuelas técnicas', 'Externo'];
 
 export const ESPACIOS = [
@@ -25,7 +31,23 @@ export const EQUIPOS = [
 ];
 
 export const ACTIVIDADES = [
-  { id: 'a1', titulo: 'Jornada de RCP', tipo: 'Práctica', sol: 'FTS', sp: 'e6', dia: 1, ini: 9, fin: 12, insc: 12, resp: 'Lic. Sergio Ibarra', codigo: '4821', personas: [], reg: false, cancelada: false },
+  {
+  id: 'a1',
+  titulo: 'Jornada de RCP',
+  tipo: 'Práctica',
+  sol: 'FTS',
+  sp: 'e6',
+  fecha: '2026-11-24',
+  dia: 1,
+  ini: 9,
+  fin: 12,
+  insc: 12,
+  resp: 'Lic. Sergio Ibarra',
+  codigo: '4821',
+  personas: [],
+  reg: false,
+  cancelada: false
+},
   { id: 'a2', titulo: 'Charla de orientación', tipo: 'Charla', sol: 'Educación Superior', sp: 'e1', dia: 2, ini: 10, fin: 12, insc: 80, resp: 'Prof. Ana Ruiz', codigo: '', personas: [], reg: false, cancelada: false },
   { id: 'a4', titulo: 'Práctica de primeros auxilios', tipo: 'Práctica', sol: 'FTS', sp: 'e1', dia: 2, ini: 11, fin: 13, insc: 30, resp: 'Lic. Sergio Ibarra', codigo: '', personas: [], reg: false, cancelada: false },
   { id: 'a3', titulo: 'Taller de robótica', tipo: 'Taller', sol: 'Escuelas técnicas', sp: 'e5', dia: 3, ini: 14, fin: 17, insc: 20, resp: 'Ing. Pablo Díaz', codigo: '', personas: [], reg: false, cancelada: false },
