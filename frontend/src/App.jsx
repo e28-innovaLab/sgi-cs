@@ -1,5 +1,5 @@
-
-import { useState } from 'react'
+import { apiFetch } from './api/client'
+import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import './App.css'
 import Login from './components/Login'
@@ -12,8 +12,31 @@ function App() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const [logueado, setLogueado] = useState(false)
   const [mensaje, setMensaje] = useState('')
+  const [verificandoSesion, setVerificandoSesion] = useState(true)
+
+  useEffect(() => {
+    async function recuperarSesion() {
+      const token = sessionStorage.getItem('token')
+
+      if (!token) {
+        setVerificandoSesion(false)
+        return
+      }
+
+      try {
+        const usuario = await apiFetch('/auth/me/')
+        dispatch({ type: 'login', sesion: usuario })
+      } catch (error) {
+        sessionStorage.removeItem('token')
+        dispatch({ type: 'logout' })
+      } finally {
+        setVerificandoSesion(false)
+      }
+    }
+
+    recuperarSesion()
+  }, [dispatch])
 
   const espacios = state.espacios
   const equipos = state.equipos
@@ -87,8 +110,16 @@ function App() {
     espacio => espacio.estado === 'Disponible'
   ).length
 
-  if (!logueado) {
-    return <Login onLogin={() => setLogueado(true)} />
+  if (verificandoSesion) {
+    return <p>Verificando sesión...</p>
+  }
+
+  if (!state.sesion) {
+    return (
+      <Login
+        onLogin={(usuario) => dispatch({ type: 'login', sesion: usuario })}
+      />
+    )
   }
 
   return (
@@ -195,7 +226,16 @@ function App() {
           <button
             className="logout-button"
             type="button"
-            onClick={() => setLogueado(false)}
+            onClick={async () => {
+              try {
+                await apiFetch('/auth/logout/', { method: 'POST' })
+              } catch (error) {
+                console.error('Error al cerrar sesión:', error)
+              } finally {
+                sessionStorage.removeItem('token')
+                dispatch({ type: 'logout' })
+              }
+            }}
           >
             Cerrar sesión
           </button>

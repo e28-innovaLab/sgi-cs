@@ -1,13 +1,15 @@
-
 import { useState } from 'react'
 import './Login.css'
+import { apiFetch } from '../api/client'
+
 
 function Login({ onLogin }) {
   const [usuario, setUsuario] = useState('')
   const [contrasena, setContrasena] = useState('')
   const [error, setError] = useState('')
+  const [cargando, setCargando] = useState(false)
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
 
     if (!usuario.trim() || !contrasena.trim()) {
@@ -16,9 +18,26 @@ function Login({ onLogin }) {
     }
 
     setError('')
-    onLogin()
-  }
+    setCargando(true)
 
+    try {
+      const data = await apiFetch('/auth/login/', {
+        method: 'POST',
+        body: JSON.stringify({
+          username: usuario.trim(),
+          password: contrasena,
+        }),
+      })
+
+      sessionStorage.setItem('token', data.token)
+
+      onLogin(data.usuario)
+    } catch (error) {
+      setError(error.message)
+    } finally {
+      setCargando(false)
+    }
+  }
   return (
     <main className="login-page">
       <section className="login-card">
@@ -56,8 +75,8 @@ function Login({ onLogin }) {
 
           {error && <p className="login-error">{error}</p>}
 
-          <button type="submit" className="login-button">
-            Ingresar al sistema
+          <button type="submit" className="login-button" disabled={cargando}>
+            {cargando ? 'Ingresando...' : 'Ingresar al sistema'}
           </button>
         </form>
 
