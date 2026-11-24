@@ -1,0 +1,14 @@
+:root {
+  --color-primario: #000000;
+  --color-secundario: #333333;
+  --color-acento: #198038;
+  --color-fondo: #f4f5f7;
+  --color-superficie: #ffffff;
+  --color-texto: #161616;
+  --color-muted: #525252;
+  --color-borde: #e0e0e0;
+  --color-err: #da1e28;
+  --color-warn: #f1c21b;
+  --color-ok: #24a148;
+  --font-main: 'Archivo', sans-serif;
+}
