@@ -8,10 +8,31 @@ const enEspacio = (equipos, sp, n) => equipos.filter(e => e.n === n && e.ubic ==
 // Devuelve { conflictos: [], avisos: [], faltantes: [] } para un pedido en un espacio.
 export function evaluar(pedido, sp, { actividades, equipos }) {
   const conflictos = [], avisos = [], faltantes = [];
-  if (FERIADOS.includes(pedido.dia)) conflictos.push('Es feriado: no se reserva ese día.');
+ if (pedido.fecha) {
+  const fecha = new Date(pedido.fecha + 'T12:00:00');
+
+  if (Number.isNaN(fecha.getTime())) {
+    conflictos.push('La fecha seleccionada no es válida.');
+  } else {
+    const diaSemana = fecha.getDay();
+
+    if (diaSemana === 0 || diaSemana === 6) {
+      conflictos.push('No se pueden reservar espacios los fines de semana.');
+    }
+
+    if (FERIADOS.includes(pedido.fecha)) {
+      conflictos.push('Es feriado: no se reserva ese día.');
+    }
+  }
+}
   if (sp.estado === 'Mantenimiento') conflictos.push(sp.nombre + ' está en mantenimiento' + (sp.hasta ? ' hasta el ' + sp.hasta : '') + '.');
   if (pedido.cupo > sp.cap) conflictos.push(sp.nombre + ' tiene capacidad para ' + sp.cap + '.');
-  const choque = actividades.find(a => !a.cancelada && a.sp === sp.id && seSuperpone(a, pedido));
+  const choque = actividades.find(a =>
+    !a.cancelada &&
+    a.sp === sp.id &&
+    (pedido.fecha ? a.fecha === pedido.fecha : a.dia === pedido.dia) &&
+    seSuperpone(a, pedido)
+  );
   if (choque) conflictos.push('Se superpone con "' + choque.titulo + '" (' + rango(choque.ini, choque.fin) + ').');
   (pedido.req || []).forEach(r => {
     const hay = enEspacio(equipos, sp, r.n), dep = libres(equipos, r.n), falta = Math.max(0, r.cant - hay);
@@ -33,4 +54,17 @@ export function opciones(pedido, ctx) {
 }
 
 // Bloques ocupados del día para la barra de disponibilidad (8 a 20 h).
-export const ocupacionDia = (spId, dia, actividades) => actividades.filter(a => !a.cancelada && a.sp === spId && a.dia === dia).map(a => ({ ini: a.ini, fin: a.fin, titulo: a.titulo }));
+export const ocupacionDia = (spId, fechaODia, actividades) =>
+  actividades
+    .filter(a =>
+      !a.cancelada &&
+      a.sp === spId &&
+      (typeof fechaODia === 'string'
+        ? a.fecha === fechaODia
+        : a.dia === fechaODia)
+    )
+    .map(a => ({
+      ini: a.ini,
+      fin: a.fin,
+      titulo: a.titulo
+    }));
