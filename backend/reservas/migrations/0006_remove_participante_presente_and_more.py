@@ -4,6 +4,40 @@ import django.db.models.deletion
 from django.db import migrations, models
 
 
+def copiar_participantes(apps, schema_editor):
+    Participante = apps.get_model('reservas', 'Participante')
+    ReservaParticipante = apps.get_model('reservas', 'ReservaParticipante')
+    alias = schema_editor.connection.alias
+    for participante in Participante.objects.using(alias).iterator():
+        ReservaParticipante.objects.using(alias).create(
+            reserva_id=participante.reserva_id,
+            participante_id=participante.pk,
+            presente=participante.presente,
+            rol='OTRO',
+        )
+
+
+def restaurar_participantes(apps, schema_editor):
+    Participante = apps.get_model('reservas', 'Participante')
+    ReservaParticipante = apps.get_model('reservas', 'ReservaParticipante')
+    alias = schema_editor.connection.alias
+    for participante in Participante.objects.using(alias).iterator():
+        vinculos = list(
+            ReservaParticipante.objects.using(alias)
+            .filter(participante_id=participante.pk)[:2]
+        )
+        if len(vinculos) != 1:
+            raise RuntimeError(
+                'No se puede revertir la migración: cada participante debe tener '
+                'exactamente una reserva para volver al modelo anterior sin perder datos.'
+            )
+        vinculo = vinculos[0]
+        Participante.objects.using(alias).filter(pk=participante.pk).update(
+            reserva_id=vinculo.reserva_id,
+            presente=vinculo.presente,
+        )
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -11,13 +45,11 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name='participante',
-            name='presente',
-        ),
-        migrations.RemoveField(
+        # Permite reconstruir la FK antes de restaurar sus valores al revertir.
+        migrations.AlterField(
             model_name='participante',
             name='reserva',
+            field=models.ForeignKey(db_column='idReserva', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='participantes', to='reservas.reserva'),
         ),
         migrations.CreateModel(
             name='ReservaParticipante',
@@ -40,5 +72,14 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name='reservaparticipante',
             constraint=models.UniqueConstraint(fields=('reserva', 'participante'), name='reserva_participante_unico'),
+        ),
+        migrations.RunPython(copiar_participantes, restaurar_participantes),
+        migrations.RemoveField(
+            model_name='participante',
+            name='presente',
+        ),
+        migrations.RemoveField(
+            model_name='participante',
+            name='reserva',
         ),
     ]

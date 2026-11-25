@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "usuarios",
     "espacios",
     "reservas",
+    "reportes.apps.ReportesConfig",
 ]
 
 MIDDLEWARE = [

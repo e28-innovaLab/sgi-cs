@@ -69,6 +69,9 @@ Entre sus funcionalidades se encuentran:
 
 Para conocer más detalles sobre la API, sus permisos y sus funcionalidades, consultá la documentación disponible en `backend/docs/`.
 
+Los endpoints de indicadores, las reglas de alertas y la consolidación histórica
+se describen en [Reportes y alertas](backend/docs/REPORTES_Y_ALERTAS.md).
+
 
 ## Instalación y ejecución
 
