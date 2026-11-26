@@ -1,85 +1,289 @@
-import { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { useStore } from '../store.jsx';
-import { DIAS } from '../data/mocks.js';
-import { opciones, ocupacionDia } from '../logic/disponibilidad.js';
-import { rango } from '../logic/formato.js';
+import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import Badge from '../components/badge.jsx';
-import Button from '../components/button.jsx';
 import Aviso from '../components/aviso.jsx';
-import Modal from '../components/modal.jsx';
-import BarraDia from '../components/barradia.jsx';
+import {
+  listarReservas,
+  listarAulasDisponibles,
+  asignarAulasReserva,
+  quitarAulaReserva,
+} from '../api/reservas';
+
 
 export default function Pedidos() {
-  const { state, dispatch, flash } = useStore(), loc = useLocation(), nav = useNavigate();
-  const lista = state.pedidos;
-  const [sel, setSel] = useState(loc.state?.sel || lista.find(p => p.estado === 'Por asignar')?.id);
-  const [elegido, setElegido] = useState(null), [confirmar, setConfirmar] = useState(false), [error, setError] = useState(false);
-  const p = lista.find(x => x.id === sel);
-  const ops = p ? opciones(p, state) : [], op = ops.find(o => o.sp.id === elegido);
-  const reservar = () => {
-    // Reemplazar por POST /reservas. Si falla: setError(true) sin perder los datos.
-    dispatch({ type: 'reservar', pedidoId: p.id, spId: op.sp.id, traslados: op.faltantes });
-    setConfirmar(false); setElegido(null);
-    flash('Reserva confirmada en ' + op.sp.nombre + '.', { label: 'Deshacer', fn: () => { dispatch({ type: 'deshacerReserva', pedidoId: p.id }); flash('Listo: el pedido volvió a Por asignar.'); } });
-  };
+  const loc = useLocation();
+
+  const [lista, setLista] = useState([]);
+  const [sel, setSel] = useState(loc.state?.sel || null);
+  const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState('');
+  const [aulasDisponibles, setAulasDisponibles] = useState([]);
+  const [cargandoAulas, setCargandoAulas] = useState(false);
+  const [errorAulas, setErrorAulas] = useState('');
+  const [aulasElegidas, setAulasElegidas] = useState([]);
+
+  useEffect(() => {
+    async function cargarReservas() {
+      setCargando(true);
+      setErrorCarga('');
+
+      try {
+        const respuesta = await listarReservas();
+        const reservas = respuesta.results ?? respuesta;
+
+        setLista(reservas);
+
+        if (reservas.length > 0) {
+          setSel(actual =>
+            reservas.some(reserva => reserva.id_reserva === actual)
+              ? actual
+              : reservas[0].id_reserva
+          );
+        } else {
+          setSel(null);
+        }
+      } catch (error) {
+        setErrorCarga(error.message);
+      } finally {
+        setCargando(false);
+      }
+    }
+
+    cargarReservas();
+  }, []);
+
+  useEffect(() => {
+    async function cargarAulas() {
+      if (!sel) {
+        setAulasDisponibles([]);
+        return;
+      }
+
+      const reserva = lista.find(
+        reserva => reserva.id_reserva === sel
+      );
+
+      if (!reserva) return;
+
+      setCargandoAulas(true);
+      setErrorAulas('');
+      setAulasElegidas([]);
+
+      try {
+        const aulas = await listarAulasDisponibles(
+          reserva.fecha_reserva,
+          reserva.horario_inicio,
+          reserva.horario_fin
+        );
+
+        setAulasDisponibles(aulas);
+      } catch (error) {
+        setErrorAulas(error.message);
+        setAulasDisponibles([]);
+      } finally {
+        setCargandoAulas(false);
+      }
+    }
+
+    cargarAulas();
+  }, [sel, lista]);
+
+
+      async function quitarAula(aulaId) {
+        setCargandoAulas(true);
+        setErrorAulas('');
+
+        try {
+          await quitarAulaReserva(sel, aulaId);
+
+          const respuesta = await listarReservas();
+          const reservas = respuesta.results ?? respuesta;
+
+          setLista(reservas);
+        } catch (error) {
+          setErrorAulas(error.message);
+        } finally {
+          setCargandoAulas(false);
+        }
+      }
+
+  const p = lista.find(reserva => reserva.id_reserva === sel);
+  async function asignarAulas() {
+    if (!sel || aulasElegidas.length === 0) {
+      setErrorAulas('Seleccioná al menos un aula.');
+      return;
+    }
+
+    setCargandoAulas(true);
+    setErrorAulas('');
+
+    try {
+      await asignarAulasReserva(sel, aulasElegidas);
+
+      const respuesta = await listarReservas();
+      const reservas = respuesta.results ?? respuesta;
+
+      setLista(reservas);
+      setAulasElegidas([]);
+      setErrorAulas('');
+    } catch (error) {
+      setErrorAulas(error.message);
+    } finally {
+      setCargandoAulas(false);
+    }
+  }
+
   return (
     <div className="split">
-      <section className="card lista" aria-label="Bandeja de pedidos">
-        {lista.map(x => (
-          <button key={x.id} className={'fila fila-btn' + (x.id === sel ? ' sel' : '')} onClick={() => { setSel(x.id); setElegido(null); }}>
-            <span><strong>{x.titulo}</strong><span className="muted">{x.sol} · {x.canal}</span></span>
-            <Badge tono={x.estado === 'Confirmado' ? 'ok' : 'info'}>{x.estado}</Badge>
+      <section className="card lista" aria-label="Bandeja de reservas">
+        {cargando && <p>Cargando reservas...</p>}
+
+        {errorCarga && (
+          <Aviso
+            tono="error"
+            titulo="No se pudieron cargar las reservas"
+          >
+            {errorCarga}
+          </Aviso>
+        )}
+
+        {!cargando && !errorCarga && lista.length === 0 && (
+          <p className="muted">No hay reservas registradas.</p>
+        )}
+
+        {!cargando && !errorCarga && lista.map(reserva => (
+          <button
+            key={reserva.id_reserva}
+            className={'fila fila-btn' + (
+              reserva.id_reserva === sel ? ' sel' : ''
+            )}
+            onClick={() => {
+              setSel(reserva.id_reserva)
+            }}
+          >
+            <span>
+              <strong>{reserva.actividad_nombre}</strong>
+              <span className="muted">
+                {new Date(
+                  reserva.fecha_reserva + 'T12:00:00'
+                ).toLocaleDateString('es-AR')}
+                {' · '}
+                {reserva.horario_inicio.slice(0, 5)}
+                {' - '}
+                {reserva.horario_fin.slice(0, 5)}
+              </span>
+            </span>
+
+            <Badge
+              tono={reserva.estado === 'Confirmada' ? 'ok' : 'info'}
+            >
+              {reserva.estado || 'Sin estado'}
+            </Badge>
           </button>
         ))}
       </section>
+
       {p && (
         <section className="card detalle">
-          <h2>{p.titulo}</h2>
+          <h2>{p.actividad_nombre}</h2>
+
           <p className="muted">
-            {p.fecha
-              ? new Date(p.fecha + 'T12:00:00').toLocaleDateString('es-AR')
-              : DIAS[p.dia]}{' '}
-            {rango(p.ini, p.fin)} · {p.cupo} personas · {p.resp}
-            {p.req?.length ? ' · ' + p.req.map(r => r.cant + ' ' + r.n.toLowerCase()).join(', ') : ''}
+            {new Date(
+              p.fecha_reserva + 'T12:00:00'
+            ).toLocaleDateString('es-AR')}
+            {' · '}
+            {p.horario_inicio.slice(0, 5)}
+            {' - '}
+            {p.horario_fin.slice(0, 5)}
           </p>
-          {p.estado === 'Confirmado' ? (
-            <Aviso tono="ok" titulo="Reserva confirmada" accion={<Button variant="secundario" size="sm" onClick={() => nav('/calendario')}>Ver en calendario</Button>}>El pedido ya tiene espacio.</Aviso>
+
+          <p>
+            <strong>Estado:</strong> {p.estado || 'Sin estado'}
+          </p>
+
+          {p.detalle && (
+            <p>
+              <strong>Detalle:</strong> {p.detalle}
+            </p>
+          )}
+
+          {p.cod_reunion && (
+            <p>
+              <strong>Código de reunión:</strong> {p.cod_reunion}
+            </p>
+          )}
+
+          <h3>Aulas asignadas</h3>
+
+          {p.aulas.length === 0 ? (
+            <p className="muted">
+              Esta reserva todavía no tiene aulas asignadas.
+            </p>
           ) : (
-            <>
-              <h3>Espacios disponibles · elegí uno</h3>
-              {ops.map(o => (
-                <div key={o.sp.id} className={'opcion' + (o.sp.id === elegido ? ' sel' : '') + (o.conflictos.length ? ' bloq' : '')}>
-                  <div className="opcion-head"><strong>{o.sp.nombre}</strong><span className="muted">Cupo {o.sp.cap} · Piso {o.sp.piso}</span>
-                    {o.conflictos.length ? <Badge tono="err">Conflicto</Badge> : o.avisos.length ? <Badge tono="warn">Con avisos</Badge> : <Badge tono="ok">Disponible</Badge>}</div>
-                  <BarraDia bloques={ocupacionDia(o.sp.id, p.fecha || p.dia, state.actividades)} nuevo={p} />
-                  {o.conflictos.map((c, i) => <p key={i} className="txt-err">{c}</p>)}
-                  {o.avisos.map((c, i) => <p key={i} className="txt-warn">{c}</p>)}
-                  {o.faltantes.filter(x => x.desdeDeposito).map((x, i) => <p key={i} className="muted">Se suman {x.desdeDeposito} {x.n.toLowerCase()} desde el depósito.</p>)}
-                  {!o.conflictos.length && <Button size="sm" variant={o.sp.id === elegido ? 'primario' : 'secundario'} onClick={() => setElegido(o.sp.id)}>{o.sp.id === elegido ? 'Elegido' : 'Elegir este espacio'}</Button>}
-                </div>
+            <ul>
+              {p.aulas.map(aula => (
+                <li key={aula.id}>
+                  {aula.nombre} — Capacidad: {aula.capacidad}
+
+                  <button
+                    type="button"
+                    onClick={() => quitarAula(aula.id)}
+                    disabled={cargandoAulas}
+                  >
+                    Quitar
+                  </button>
+                </li>
               ))}
-              {op && <Button onClick={() => setConfirmar(true)}>Confirmar reserva</Button>}
-            </>
+            </ul>
+            )}
+
+          <h3>Aulas disponibles</h3>
+
+          {cargandoAulas && <p>Cargando aulas disponibles...</p>}
+
+          {errorAulas && (
+            <Aviso tono="error" titulo="No se pudieron gestionar las aulas">
+              {errorAulas}
+            </Aviso>
+          )}
+
+          {!cargandoAulas && !errorAulas && aulasDisponibles.length === 0 && (
+            <p className="muted">
+            No hay aulas disponibles para esta fecha y horario.
+          </p>
+          )}
+
+          {!cargandoAulas && aulasDisponibles.map(aula => (
+            <label key={aula.id} className="fila">
+              <input
+                type="checkbox"
+                checked={aulasElegidas.includes(aula.id)}
+                onChange={event => {
+                  setAulasElegidas(actual =>
+                    event.target.checked
+                      ? [...actual, aula.id]
+                      : actual.filter(id => id !== aula.id)
+                  );
+                }}
+              />
+              <span>
+                <strong>{aula.nombre}</strong>
+                <span className="muted"> — Capacidad: {aula.capacidad}</span>
+              </span>
+            </label>
+          ))}
+
+          {aulasElegidas.length > 0 && (
+            <button
+              type="button"
+              className="btn"
+              onClick={asignarAulas}
+              disabled={cargandoAulas}
+            >
+              {cargandoAulas ? 'Asignando...' : 'Asignar aulas'}
+            </button>
           )}
         </section>
-      )}
-      {confirmar && op && (
-        <Modal titulo="Confirmar reserva" onClose={() => setConfirmar(false)} ancho={560}
-          pie={<><Button variant="neutro" onClick={() => setConfirmar(false)}>Volver</Button><Button onClick={reservar}>{op.avisos.length ? 'Sí, confirmar igual' : 'Sí, confirmar reserva'}</Button></>}>
-          {error && <Aviso tono="error" titulo="No pudimos guardar la reserva">Tus datos siguen acá. Probá de nuevo.</Aviso>}
-          {op.avisos.length > 0 && <Aviso tono="warn" titulo="Este espacio tiene avisos">{op.avisos.join(' ')}</Aviso>}
-          <dl className="resumen">
-            <dt>Día y horario</dt>
-            <dd>
-              {p.fecha
-                ? new Date(p.fecha + 'T12:00:00').toLocaleDateString('es-AR')
-                : DIAS[p.dia]}{' '}
-              {rango(p.ini, p.fin)}
-            </dd>
-            {op.faltantes.length > 0 && <><dt>Equipamiento</dt><dd>{op.faltantes.map(x => x.desdeDeposito + ' ' + x.n.toLowerCase() + ' desde el depósito').join(', ')}</dd></>}
-          </dl>
-        </Modal>
       )}
     </div>
   );

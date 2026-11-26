@@ -59,6 +59,7 @@ class Actividad(models.Model):
         PRACTICA = "PRACTICA", "Práctica"
         WORKSHOP = "WORKSHOP", "Workshop"
         CAPACITACION = "CAPACITACION", "Capacitación"
+        LABORATORIO = "LABORATORIO", "Laboratorio"
         OTRA = "OTRA", "Otra"
 
     id_actividad = models.AutoField(

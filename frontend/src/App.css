@@ -2572,3 +2572,234 @@ body {
     gap: 10px;
   }
 }
+
+
+/* ========================================
+   MÓDULO ACTIVIDADES
+   ======================================== */
+
+.actividades-page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.actividades-page .activity-form {
+  margin-top: 22px;
+}
+
+.actividades-page .activity-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.actividades-page .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.actividades-page .form-group label {
+  color: #34445a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.actividades-page .form-group input,
+.actividades-page .form-group select,
+.actividades-page .form-group textarea {
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  border: 1px solid #dfe6ef;
+  border-radius: 8px;
+  padding: 10px 13px;
+  background: #fff;
+  color: #30425a;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.actividades-page .form-group textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.actividades-page .form-group input:focus,
+.actividades-page .form-group select:focus,
+.actividades-page .form-group textarea:focus {
+  outline: none;
+  border-color: #236d68;
+  box-shadow: 0 0 0 3px rgba(35, 109, 104, 0.10);
+}
+
+.actividades-page .activity-field-full {
+  grid-column: 1 / -1;
+}
+
+.actividades-page .activity-form-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 20px;
+}
+
+.actividades-page .activity-form-actions button {
+  min-height: 44px;
+  padding: 0 22px;
+  border: none;
+  border-radius: 8px;
+  background: #236d68;
+  color: #fff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.actividades-page .activity-form-actions button:hover {
+  background: #195650;
+}
+
+.actividades-page .activity-form-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.actividades-page .activity-message {
+  margin: 16px 0 0;
+  padding: 11px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.actividades-page .activity-error {
+  background: #fff0f0;
+  color: #b42318;
+}
+
+.actividades-page .activity-success {
+  background: #eaf7f0;
+  color: #18794e;
+}
+
+/* Tarjetas del listado */
+
+.actividades-page .activity-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.actividades-page .activity-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #e5eaf1;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.actividades-page .activity-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.actividades-page .activity-card h4 {
+  margin: 0 0 7px;
+  color: #26384f;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.actividades-page .activity-type {
+  display: inline-block;
+  padding: 5px 9px;
+  border-radius: 20px;
+  background: #eaf3f2;
+  color: #236d68;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.actividades-page .activity-card-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #edf0f4;
+}
+
+.actividades-page .activity-card-details div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.actividades-page .activity-card-details span {
+  color: #8793a4;
+  font-size: 11px;
+}
+
+.actividades-page .activity-card-details strong {
+  color: #34445a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Adaptación a pantallas pequeñas */
+
+@media (max-width: 700px) {
+  .actividades-page .activity-fields,
+  .actividades-page .activity-list {
+    grid-template-columns: 1fr;
+  }
+
+  .actividades-page .activity-field-full {
+    grid-column: auto;
+  }
+}
+
+.actividades-page .activity-edit-button {
+  padding: 7px 13px;
+  border: 1px solid #236d68;
+  border-radius: 7px;
+  background: #fff;
+  color: #236d68;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.actividades-page .activity-edit-button:hover {
+  background: #eaf3f2;
+}
+
+.actividades-page .activity-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.actividades-page .activity-delete-button {
+  padding: 7px 13px;
+  border: 1px solid #dc5555;
+  border-radius: 7px;
+  background: #fff;
+  color: #c43d3d;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.actividades-page .activity-delete-button:hover {
+  background: #fff0f0;
+}

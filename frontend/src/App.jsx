@@ -1,9 +1,12 @@
 import { apiFetch } from './api/client'
+import { listarActividades } from './api/actividades';
+import { crearReserva, listarReservas } from './api/reservas';
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import './App.css'
 import Login from './components/Login'
 import Pedidos from './pages/Pedidos.jsx';
+import Actividades from './pages/Actividades.jsx';
 import { useStore } from './store.jsx'
 import { DIAS, AREAS } from './data/mocks.js'
 import Calendario from './pages/Calendario.jsx';
@@ -16,6 +19,12 @@ function App() {
 
   const [mensaje, setMensaje] = useState('')
   const [verificandoSesion, setVerificandoSesion] = useState(true)
+  const [actividadesDisponibles, setActividadesDisponibles] = useState([]);
+  const [cargandoActividades, setCargandoActividades] = useState(false);
+  const [errorActividades, setErrorActividades] = useState('');
+  const [reservasRegistradas, setReservasRegistradas] = useState([]);
+  const [cargandoReservas, setCargandoReservas] = useState(false);
+  const [errorReservas, setErrorReservas] = useState('');
 
   useEffect(() => {
     async function recuperarSesion() {
@@ -40,6 +49,7 @@ function App() {
     recuperarSesion()
   }, [dispatch])
 
+
   const espacios = state.espacios
   const equipos = state.equipos
   const actividades = state.actividades
@@ -50,79 +60,97 @@ function App() {
       ? 'inicio'
       : location.pathname.replace('/', '')
 
+
+  useEffect(() => {
+    if (seccionActiva !== 'reservas') return;
+
+    async function cargarActividades() {
+      setCargandoActividades(true);
+      setErrorActividades('');
+
+      try {
+        const respuesta = await listarActividades();
+
+        setActividadesDisponibles(
+          respuesta.results ?? respuesta
+        );
+      } catch (error) {
+        setErrorActividades(error.message);
+      } finally {
+        setCargandoActividades(false);
+      }
+    }
+
+    cargarActividades();
+  }, [seccionActiva]);
+
+  useEffect(() => {
+    if (seccionActiva !== 'reservas') return;
+
+    const cargarReservas = async () => {
+      try {
+        setCargandoReservas(true);
+        setErrorReservas('');
+
+        const respuesta = await listarReservas();
+
+        setReservasRegistradas(respuesta.results ?? respuesta);
+      } catch (error) {
+        setErrorReservas(error.message || 'No se pudieron cargar las reservas.');
+      } finally {
+        setCargandoReservas(false);
+      }
+    };
+
+    cargarReservas();
+  }, [seccionActiva]);
+
+
   function irASeccion(seccion) {
     navigate(seccion === 'inicio' ? '/' : `/${seccion}`)
   }
 
  
-function agregarPedido(event) {
+async function agregarPedido(event) {
   event.preventDefault();
 
-  const formulario = new FormData(event.currentTarget);
+  const formulario = event.currentTarget;
+  const datos = new FormData(formulario);
 
-  const titulo = formulario.get('titulo').trim();
-  const fecha = formulario.get('fecha');
-  const ini = Number(formulario.get('ini'));
-  const fin = Number(formulario.get('fin'));
-  const cupo = Number(formulario.get('cupo'));
-  const sol = formulario.get('sol');
-  const resp = formulario.get('resp').trim();
-  const equipo = formulario.get('equipo');
-  const cantidadEquipo = Number(formulario.get('cantidadEquipo'));
+  const actividad = Number(datos.get('actividad'));
+  const fecha = datos.get('fecha');
+  const horarioInicio = datos.get('ini');
+  const horarioFin = datos.get('fin');
+  const detalle = datos.get('detalle').trim();
+  const codReunion = datos.get('cod_reunion').trim();
 
-  // Validar los datos generales y la fecha.
-  const errores = validarSolicitud(
-    { titulo, fecha, sol, cupo, resp },
-    Infinity
-  );
-
-  if (Object.keys(errores).length > 0) {
-    setMensaje(Object.values(errores).join(' '));
-    return;
-  }
-
-  // Validar el horario.
-  if (fin <= ini) {
+  if (horarioFin <= horarioInicio) {
     setMensaje('La hora de finalización debe ser posterior a la hora de inicio.');
     return;
   }
 
-  if (ini < 8 || fin > 20) {
-    setMensaje('El horario debe estar comprendido entre las 8 y las 20 hs.');
-    return;
-  }
-
-  const fechaSeleccionada = new Date(fecha + 'T12:00:00');
-  const diaSemana = fechaSeleccionada.getDay();
-
-  // El formulario usa lunes = 0, martes = 1, etc.
-  const dia = diaSemana - 1;
-
-  const req = equipo
-    ? [{ n: equipo, cant: cantidadEquipo }]
-    : [];
-
-  const nuevoPedido = {
-    id: 'p' + Date.now(),
-    canal: 'Formulario',
-    sol,
-    titulo,
-    tipo: 'Solicitud',
-    fecha,
-    dia,
-    ini,
-    fin,
-    cupo,
-    resp,
-    req
+  const reserva = {
+    actividad,
+    fecha_reserva: fecha,
+    horario_inicio: `${horarioInicio}:00`,
+    horario_fin: `${horarioFin}:00`,
+    detalle,
+    cod_reunion: codReunion || null,
   };
 
-  dispatch({ type: 'pedidoNuevo', pedido: nuevoPedido });
+  try {
+    await crearReserva(reserva);
 
-  event.currentTarget.reset();
-  setMensaje('El pedido se registró correctamente.');
+    // Actualizar el listado con las reservas del backend.
+    const respuesta = await listarReservas();
+    setReservasRegistradas(respuesta.results ?? respuesta);
+
+    formulario.reset();
+    setMensaje('La reserva se registró correctamente.');
+  } catch (error) {
+    setMensaje(`No se pudo registrar la reserva: ${error.message}`);
+  }
 }
-
 
     
   const pendientes = pedidos.filter(
@@ -184,6 +212,17 @@ function agregarPedido(event) {
           >
             ▥ <span>Dashboard</span>
           </a>
+          <a
+            className={`menu-item ${seccionActiva === 'actividades' ? 'active' : ''}`}
+            href="/actividades"
+            onClick={event => {
+              event.preventDefault();
+              irASeccion('actividades');
+            }}
+          >
+            ▣ <span>Actividades</span>
+          </a>
+
           <a
             className={`menu-item ${seccionActiva === 'reservas' ? 'active' : ''}`}
             href="/reservas"
@@ -398,40 +437,32 @@ function agregarPedido(event) {
                 onSubmit={agregarPedido}
               >
                 <div className="form-group">
-                  <label htmlFor="pedido-titulo">Actividad o motivo</label>
-                  <input
-                    id="pedido-titulo"
-                    name="titulo"
-                    type="text"
-                    placeholder="Ej. Capacitación de equipo"
-                    required
-                  />
-                </div>
+                  <label htmlFor="reserva-actividad">Actividad</label>
 
-                <div className="form-group">
-                  <label htmlFor="pedido-area">Área solicitante</label>
-                  <select id="pedido-area" name="sol" required>
-                    {AREAS.map(area => (
-                      <option key={area} value={area}>{area}</option>
-                    ))}
+                  <select
+                    id="reserva-actividad"
+                    name="actividad"
+                    required
+                    disabled={cargandoActividades || actividadesDisponibles.length === 0}
+                  >
+                  <option value="">
+                    {cargandoActividades
+                      ? 'Cargando actividades...'
+                      : 'Seleccioná una actividad'}
+                  </option>
+
+                  {actividadesDisponibles.map(actividad => (
+                    <option key={actividad.id_actividad} value={actividad.id_actividad}>
+                      {actividad.nombre}
+                    </option>
+                  ))}
                   </select>
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="pedido-responsable">Responsable</label>
+                  <label htmlFor="reserva-fecha">Fecha de reserva</label>
                   <input
-                    id="pedido-responsable"
-                    name="resp"
-                    type="text"
-                    placeholder="Nombre del responsable"
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="pedido-fecha">Fecha de la actividad</label>
-                  <input
-                    id="pedido-fecha"
+                    id="reserva-fecha"
                     name="fecha"
                     type="date"
                     min={new Date().toLocaleDateString('en-CA')}
@@ -440,10 +471,11 @@ function agregarPedido(event) {
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="pedido-inicio">Hora de inicio</label>
-                  <select id="pedido-inicio" name="ini" required>
+                  <label htmlFor="reserva-inicio">Hora de inicio</label>
+                  <select id="reserva-inicio" name="ini" required>
+                    <option value="">Seleccioná una hora</option>
                     {Array.from({ length: 13 }, (_, i) => i + 8).map(hora => (
-                      <option key={hora} value={hora}>
+                      <option key={hora} value={`${String(hora).padStart(2, '0')}:00`}>
                         {String(hora).padStart(2, '0')}:00
                       </option>
                     ))}
@@ -451,46 +483,34 @@ function agregarPedido(event) {
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="pedido-fin">Hora de finalización</label>
-                  <select id="pedido-fin" name="fin" required>
+                  <label htmlFor="reserva-fin">Hora de finalización</label>
+                  <select id="reserva-fin" name="fin" required>
+                    <option value="">Seleccioná una hora</option>
                     {Array.from({ length: 13 }, (_, i) => i + 8).map(hora => (
-                      <option key={hora} value={hora}>
-                        {String(hora).padStart(2, '0')}:00
-                      </option>
+                      <option key={hora} value={`${String(hora).padStart(2, '0')}:00`}>
+                      {String(hora).padStart(2, '0')}:00
+                    </option>
                     ))}
                   </select>
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="pedido-cupo">Cantidad de personas</label>
-                  <input
-                    id="pedido-cupo"
-                    name="cupo"
-                    type="number"
-                    min="1"
-                    placeholder="Ej. 20"
-                    required
+                  <label htmlFor="reserva-detalle">Detalle</label>
+                  <textarea
+                    id="reserva-detalle"
+                    name="detalle"
+                    placeholder="Descripción adicional de la reserva"
+                    rows="3"
                   />
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="pedido-equipo">Equipamiento solicitado</label>
-                  <select id="pedido-equipo" name="equipo">
-                    <option value="">Sin equipamiento adicional</option>
-                    {[...new Set(equipos.map(equipo => equipo.n))].map(nombre => (
-                      <option key={nombre} value={nombre}>{nombre}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="pedido-cantidad-equipo">Cantidad de equipos</label>
+                  <label htmlFor="reserva-codigo">Código de reunión</label>
                   <input
-                    id="pedido-cantidad-equipo"
-                    name="cantidadEquipo"
-                    type="number"
-                    min="1"
-                    defaultValue="1"
+                    id="reserva-codigo"
+                    name="cod_reunion"
+                    type="text"
+                    placeholder="Opcional"
                   />
                 </div>
 
@@ -504,13 +524,19 @@ function agregarPedido(event) {
                   {mensaje}
                 </p>
               )}
+
+              {errorActividades && (
+                <p className="reservation-message" role="alert">
+                  Error al cargar actividades: {errorActividades}
+                </p>
+              )}
             </section>
 
             <section className="panel">
               <div className="panel-heading">
                 <div>
                   <h3>Solicitudes registradas</h3>
-                  <p>{pedidos.length} pedidos en el sistema</p>
+                  <p>{reservasRegistradas.length} reservas en el sistema</p>
                 </div>
               </div>
 
@@ -519,22 +545,24 @@ function agregarPedido(event) {
                   <thead>
                     <tr>
                       <th>Actividad</th>
-                      <th>Área</th>
-                      <th>Día</th>
+                      <th>Fecha</th>
+                      <th>Horario</th>
                       <th>Estado</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {pedidos.map(pedido => (
-                      <tr key={pedido.id}>
-                        <td><strong>{pedido.titulo}</strong></td>
-                        <td>{pedido.sol}</td>
+                    {reservasRegistradas.map(reserva => (
+                      <tr key={reserva.id_reserva}>
+                        <td><strong>{reserva.actividad_nombre}</strong></td>
                         <td>
-                          {pedido.fecha
-                            ? new Date(pedido.fecha + 'T12:00:00').toLocaleDateString('es-AR')
-                            : DIAS[pedido.dia]}
+                          {reserva.fecha_reserva
+                            ? new Date(reserva.fecha_reserva + 'T12:00:00').toLocaleDateString('es-AR')
+                            : '-'}
                         </td>
-                        <td>{pedido.estado}</td>
+                        <td>
+                        {reserva.horario_inicio} - {reserva.horario_fin}
+                        </td>
+                        <td>{reserva.estado}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -544,6 +572,10 @@ function agregarPedido(event) {
           </>
         )}
 
+        {seccionActiva === 'actividades' && (
+            <Actividades />
+        )}
+
         {seccionActiva === 'pedidos' && (
           <section className="panel pedidos-panel">
             <div className="panel-heading">
@@ -551,7 +583,6 @@ function agregarPedido(event) {
                 <h3>Gestión de pedidos</h3>
                 <p>Evaluá solicitudes y asigná espacios disponibles.</p>
               </div>
-              <span className="pedidos-total">{pedidos.length} pedidos</span>
             </div>
 
             <Pedidos />

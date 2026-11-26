@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Archivos
+der.pdf
+Sistema de Gestion CS.docx.pdf
+
+# Configuracion local de Claude Code
+.claude/settings.local.json
