@@ -31,13 +31,18 @@ export default function Pedidos() {
         const respuesta = await listarReservas();
         const reservas = respuesta.results ?? respuesta;
 
-        setLista(reservas);
+        // En Pedidos solamente mostramos reservas pendientes.
+        const reservasPendientes = reservas.filter(
+          reserva => reserva.estado === 'Pendiente'
+        );
 
-        if (reservas.length > 0) {
+        setLista(reservasPendientes);
+
+        if (reservasPendientes.length > 0) {
           setSel(actual =>
-            reservas.some(reserva => reserva.id_reserva === actual)
+            reservasPendientes.some(reserva => reserva.id_reserva === actual)
               ? actual
-              : reservas[0].id_reserva
+              : reservasPendientes[0].id_reserva
           );
         } else {
           setSel(null);
@@ -98,8 +103,17 @@ export default function Pedidos() {
 
           const respuesta = await listarReservas();
           const reservas = respuesta.results ?? respuesta;
+          
+          const reservasPendientes = reservas.filter(
+            reserva => reserva.estado === 'Pendiente'
+          );
 
-          setLista(reservas);
+          setLista(reservasPendientes);
+
+          if (!reservasPendientes.some(reserva => reserva.id_reserva === sel)) {
+            setSel(reservasPendientes[0]?.id_reserva ?? null);
+          }
+
         } catch (error) {
           setErrorAulas(error.message);
         } finally {
@@ -123,7 +137,16 @@ export default function Pedidos() {
       const respuesta = await listarReservas();
       const reservas = respuesta.results ?? respuesta;
 
-      setLista(reservas);
+      const reservasPendientes = reservas.filter(
+        reserva => reserva.estado === 'Pendiente'
+      );
+
+      setLista(reservasPendientes);
+
+      if (!reservasPendientes.some(reserva => reserva.id_reserva === sel)) {
+        setSel(reservasPendientes[0]?.id_reserva ?? null);
+      }
+
       setAulasElegidas([]);
       setErrorAulas('');
     } catch (error) {
@@ -148,7 +171,7 @@ export default function Pedidos() {
         )}
 
         {!cargando && !errorCarga && lista.length === 0 && (
-          <p className="muted">No hay reservas registradas.</p>
+          <p className="muted">No hay reservas pendientes para gestionar.</p>
         )}
 
         {!cargando && !errorCarga && lista.map(reserva => (
@@ -285,6 +308,17 @@ export default function Pedidos() {
           )}
         </section>
       )}
+
+      {!p && !cargando && !errorCarga && lista.length === 0 && (
+        <section className="card detalle">
+          <h2>Sin reservas pendientes</h2>
+          <p className="muted">
+            Cuando haya nuevas reservas pendientes, aparecerán aquí
+            para que puedas gestionar sus aulas.
+          </p>
+        </section>
+      )}
+
     </div>
   );
 }

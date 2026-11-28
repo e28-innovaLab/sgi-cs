@@ -2803,3 +2803,48 @@ body {
 .actividades-page .activity-delete-button:hover {
   background: #fff0f0;
 }
+
+
+/* ========================================
+   MÓDULO RESERVAS
+   ======================================== */
+
+/* Botones de acciones en la tabla de Reservas */
+
+.pedidos-table .activity-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pedidos-table .activity-edit-button {
+  padding: 7px 13px;
+  border: 1px solid #236d68;
+  border-radius: 7px;
+  background: #fff;
+  color: #236d68;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pedidos-table .activity-edit-button:hover {
+  background: #eaf3f2;
+}
+
+.pedidos-table .activity-delete-button {
+  padding: 7px 13px;
+  border: 1px solid #dc5555;
+  border-radius: 7px;
+  background: #fff;
+  color: #c43d3d;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pedidos-table .activity-delete-button:hover {
+  background: #fff0f0;
+}

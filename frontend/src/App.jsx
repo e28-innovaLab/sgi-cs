@@ -1,7 +1,7 @@
 import { apiFetch } from './api/client'
 import { listarActividades } from './api/actividades';
-import { crearReserva, listarReservas } from './api/reservas';
-import { useEffect, useState } from 'react'
+import { crearReserva, listarReservas, actualizarReserva, eliminarReserva, } from './api/reservas';
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import './App.css'
 import Login from './components/Login'
@@ -25,6 +25,8 @@ function App() {
   const [reservasRegistradas, setReservasRegistradas] = useState([]);
   const [cargandoReservas, setCargandoReservas] = useState(false);
   const [errorReservas, setErrorReservas] = useState('');
+  const [reservaEditando, setReservaEditando] = useState(null);
+  const formularioReservaRef = useRef(null);
 
   useEffect(() => {
     async function recuperarSesion() {
@@ -62,7 +64,7 @@ function App() {
 
 
   useEffect(() => {
-    if (seccionActiva !== 'reservas') return;
+    if (seccionActiva !== 'reservas' && seccionActiva !== 'inicio') return;
 
     async function cargarActividades() {
       setCargandoActividades(true);
@@ -85,7 +87,7 @@ function App() {
   }, [seccionActiva]);
 
   useEffect(() => {
-    if (seccionActiva !== 'reservas') return;
+    if (seccionActiva !== 'reservas' && seccionActiva !== 'inicio') return;
 
     const cargarReservas = async () => {
       try {
@@ -93,7 +95,7 @@ function App() {
         setErrorReservas('');
 
         const respuesta = await listarReservas();
-
+    
         setReservasRegistradas(respuesta.results ?? respuesta);
       } catch (error) {
         setErrorReservas(error.message || 'No se pudieron cargar las reservas.');
@@ -110,7 +112,54 @@ function App() {
     navigate(seccion === 'inicio' ? '/' : `/${seccion}`)
   }
 
- 
+  function iniciarEdicionReserva(reserva) {
+  setReservaEditando(reserva.id_reserva);
+
+  const formulario = formularioReservaRef.current;
+
+  formulario.elements.namedItem('actividad').value = reserva.actividad;
+  formulario.elements.namedItem('fecha').value = reserva.fecha_reserva;
+  formulario.elements.namedItem('ini').value = reserva.horario_inicio.slice(0, 5);
+  formulario.elements.namedItem('fin').value = reserva.horario_fin.slice(0, 5);
+  formulario.elements.namedItem('detalle').value = reserva.detalle || '';
+  formulario.elements.namedItem('cod_reunion').value = reserva.cod_reunion || '';
+
+  setMensaje('');
+  setErrorReservas('');
+
+  formulario.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start',
+  });
+  }
+
+async function manejarEliminarReserva(reserva) {
+  const confirmar = window.confirm(
+    `¿Estás seguro de que querés eliminar la reserva de "${reserva.actividad_nombre}"?`
+  );
+
+  if (!confirmar) return;
+
+  setMensaje('');
+  setErrorReservas('');
+
+  try {
+    await eliminarReserva(reserva.id_reserva);
+
+    if (reservaEditando === reserva.id_reserva) {
+      formularioReservaRef.current.reset();
+      setReservaEditando(null);
+    }
+
+    setMensaje('Reserva eliminada correctamente.');
+
+    const respuesta = await listarReservas();
+    setReservasRegistradas(respuesta.results ?? respuesta);
+  } catch (error) {
+    setErrorReservas(error.message);
+  }
+}
+
 async function agregarPedido(event) {
   event.preventDefault();
 
@@ -139,27 +188,33 @@ async function agregarPedido(event) {
   };
 
   try {
-    await crearReserva(reserva);
+    if (reservaEditando !== null) {
+      await actualizarReserva(reservaEditando, reserva);
+      setMensaje('La reserva se actualizó correctamente.');
+    } else {
+      await crearReserva(reserva);
+      setMensaje('La reserva se registró correctamente.');
+    }
 
-    // Actualizar el listado con las reservas del backend.
     const respuesta = await listarReservas();
     setReservasRegistradas(respuesta.results ?? respuesta);
 
     formulario.reset();
-    setMensaje('La reserva se registró correctamente.');
+    setReservaEditando(null);
   } catch (error) {
-    setMensaje(`No se pudo registrar la reserva: ${error.message}`);
+    setMensaje(`No se pudo guardar la reserva: ${error.message}`);
   }
 }
 
+
     
-  const pendientes = pedidos.filter(
-    pedido => pedido.estado === 'Por asignar'
-  ).length
+  const pendientes = reservasRegistradas.filter(
+    reserva => reserva.estado === 'Pendiente'
+  ).length;
 
   const espaciosDisponibles = espacios.filter(
     espacio => espacio.estado === 'Disponible'
-  ).length
+  ).length;
 
   if (verificandoSesion) {
     return <p>Verificando sesión...</p>
@@ -357,15 +412,15 @@ async function agregarPedido(event) {
               <article className="stat-card">
                 <div className="stat-icon orange">◷</div>
                 <span>Actividades registradas</span>
-                <strong>{actividades.filter(a => !a.cancelada).length}</strong>
-                <small>Actividades no canceladas</small>
+                <strong>{actividadesDisponibles.length}</strong>
+                <small>Total de actividades</small>
               </article>
 
               <article className="stat-card">
                 <div className="stat-icon purple">▤</div>
-                <span>Pedidos pendientes</span>
+                <span>Reservas</span>
                 <strong>{pendientes}</strong>
-                <small>Solicitudes por asignar</small>
+                <small>Reservas pendientes de confirmación</small>
               </article>
             </section>
 
@@ -425,14 +480,25 @@ async function agregarPedido(event) {
         {seccionActiva === 'reservas' && (
           <>
             <section className="panel form-panel">
+              
               <div className="panel-heading">
                 <div>
-                  <h3>Nueva solicitud de espacio</h3>
-                  <p>Completá los datos para registrar un pedido.</p>
+                  <h3>
+                    {reservaEditando !== null
+                      ? 'Editar reserva'
+                      : 'Nueva solicitud de espacio'}
+                  </h3>
+
+                  <p>
+                    {reservaEditando !== null
+                    ? 'Modificá los datos de la reserva seleccionada.'
+                    : 'Completá los datos para registrar un pedido.'}
+                  </p>
                 </div>
               </div>
 
               <form
+                ref={formularioReservaRef}
                 className="resource-form reservation-form"
                 onSubmit={agregarPedido}
               >
@@ -515,8 +581,23 @@ async function agregarPedido(event) {
                 </div>
 
                 <div className="resource-form-actions">
-                  <button type="submit">Registrar pedido</button>
-                </div>
+                  <button type="submit">
+                    {reservaEditando !== null ? 'Guardar cambios' : 'Registrar pedido'}
+                  </button>
+
+                  {reservaEditando !== null && (
+                    <button
+                    type="button"
+                    onClick={() => {
+                      formularioReservaRef.current.reset();
+                      setReservaEditando(null);
+                      setMensaje('');
+                    }}
+                  >
+                    Cancelar edición
+                  </button>
+                )}
+              </div>
               </form>
 
               {mensaje && (
@@ -536,7 +617,13 @@ async function agregarPedido(event) {
               <div className="panel-heading">
                 <div>
                   <h3>Solicitudes registradas</h3>
-                  <p>{reservasRegistradas.length} reservas en el sistema</p>
+                  <p>
+                    {cargandoReservas
+                      ? 'Cargando reservas...'
+                      : errorReservas
+                        ? 'No se pudo obtener el total de reservas'
+                        : `${reservasRegistradas.length} reservas en el sistema`}
+                  </p>
                 </div>
               </div>
 
@@ -548,23 +635,64 @@ async function agregarPedido(event) {
                       <th>Fecha</th>
                       <th>Horario</th>
                       <th>Estado</th>
+                      <th>Acciones</th>
                     </tr>
                   </thead>
+
                   <tbody>
-                    {reservasRegistradas.map(reserva => (
-                      <tr key={reserva.id_reserva}>
-                        <td><strong>{reserva.actividad_nombre}</strong></td>
-                        <td>
-                          {reserva.fecha_reserva
-                            ? new Date(reserva.fecha_reserva + 'T12:00:00').toLocaleDateString('es-AR')
-                            : '-'}
-                        </td>
-                        <td>
-                        {reserva.horario_inicio} - {reserva.horario_fin}
-                        </td>
-                        <td>{reserva.estado}</td>
+                    {cargandoReservas ? (
+                      <tr>
+                        <td colSpan="5">Cargando reservas...</td>
                       </tr>
-                    ))}
+                    ) : errorReservas ? (
+                      <tr>
+                        <td colSpan="5">{errorReservas}</td>
+                      </tr>
+                    ) : reservasRegistradas.length === 0 ? (
+                      <tr>
+                        <td colSpan="5">No hay reservas registradas.</td>
+                      </tr>
+                    ) : (
+                      reservasRegistradas.map(reserva => (
+                        <tr key={reserva.id_reserva}>
+                          <td>
+                            <strong>{reserva.actividad_nombre}</strong>
+                          </td>
+
+                          <td>
+                            {reserva.fecha_reserva
+                              ? new Date(reserva.fecha_reserva + 'T12:00:00').toLocaleDateString('es-AR')
+                              : '-'}
+                          </td>
+
+                          <td>
+                            {reserva.horario_inicio} - {reserva.horario_fin}
+                          </td>
+
+                          <td>{reserva.estado}</td>
+
+                          <td>
+                            <div className="activity-card-actions">
+                              <button
+                                type="button"
+                                className="activity-edit-button"
+                                onClick={() => iniciarEdicionReserva(reserva)}
+                              >
+                                Editar
+                              </button>
+
+                              <button
+                                type="button"
+                                className="activity-delete-button"
+                                onClick={() => manejarEliminarReserva(reserva)}
+                              >
+                                Eliminar
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>

@@ -48,3 +48,18 @@ export function quitarAulaReserva(id, aulaId) {
     }),
   });
 }
+
+// Actualizar una reserva existente.
+export function actualizarReserva(id, datos) {
+  return apiFetch(`/reservas/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(datos),
+  });
+}
+
+// Eliminar una reserva.
+export function eliminarReserva(id) {
+  return apiFetch(`/reservas/${id}/`, {
+    method: 'DELETE',
+  });
+}
